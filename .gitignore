@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Model caches and weights — these are huge and should never be committed
+**/models/
+*.bin
+*.safetensors
+.cache/
+huggingface_cache/
+
+# Environment/secrets
+.env
+*.env.local
+
+# Generated data (keep folder structure, ignore contents)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/outputs/*
+!data/outputs/.gitkeep
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS junk
+.DS_Store
+Thumbs.db
