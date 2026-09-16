@@ -25,7 +25,7 @@ data/processed/*
 !data/processed/.gitkeep
 data/outputs/*
 !data/outputs/.gitkeep
-
+data/*
 # Database
 *.db
 *.sqlite
