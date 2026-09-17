@@ -762,7 +762,7 @@ For every phase: **Objective, Expected files, Dependencies, Input, Output, Valid
 - **Fallback:** if a stage proves unreliable/buggy under time pressure, mark it optional/disabled in configs rather than blocking the phase — note it as a limitation.
 
 ### Phase 3 — Model Smoke Test
-- **Objective:** the single highest-uncertainty phase — confirm Qwen2.5-VL-3B + Modi LoRA can actually run (locally or via Colab) and produce real output.
+- **Objective:** the single highest-uncertainty phase — confirm Qwen2.5-VL-3B + Modi LoRA can actually run locally and produce real output.
 - **Expected files:** `scripts/smoke_test_model.py`, initial `backend/services/transcription/local_qwen.py` (or `colab_client.py` if pivoting immediately).
 - **Dependencies:** Phase 0 (environment known); inspection of the actual HF repos per Section 13.
 - **Input:** one small test image (can reuse the Phase 2 sample, original or a restored variant).

@@ -1,0 +1,7 @@
+{
+  "inference_mode": "colab",
+  "model_name": "Remote Colab (Qwen2.5-VL-3B + LoRA)",
+  "seconds": 73.6,
+  "prompt": "This image contains handwritten text in Modi script, a historical cursive script used to write the Marathi language. Transliterate the text in this image into Devanagari script. Output only the Devanagari text, with no explanation.",
+  "text": "आ र १४ लण स २ व ४ घ औद अळ इ छ ५ ६ थ ५ औफ अंसब इशन मट उशक ० रा ९ कडील ३ चत अळ औद"
+}

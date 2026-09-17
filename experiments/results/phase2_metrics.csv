@@ -1,0 +1,8 @@
+config,stages,n_stages,shape_h,shape_w,channels,mean,std,min,max,sharpness_lap_var,unique_values,is_binary,ink_pct,runtime_s
+original,validated,1,424,552,3,204.48,29.91,56,253,1425.74,196,False,2.67,0.0048
+grayscale,validated+grayscale,2,424,552,1,204.48,29.91,56,253,1425.74,196,False,2.67,0.0053
+denoised,validated+grayscale+denoised,3,424,552,1,204.64,29.1,56,251,565.24,194,False,2.63,0.1106
+enhanced,validated+grayscale+denoised+enhanced,4,424,552,1,199.03,32.91,42,252,880.9,208,False,4.48,0.1114
+binarized,validated+grayscale+denoised+enhanced+otsu_binarized,5,424,552,1,209.53,97.6,0,255,17073.34,2,True,17.83,0.1159
+deskewed,validated+grayscale+deskewed,3,424,552,1,204.56,28.73,65,252,493.67,184,False,2.16,0.0402
+full_restoration,validated+grayscale+denoised+enhanced+deskewed+otsu_binarized+borders_cleaned,7,424,552,1,222.23,85.33,0,255,16564.64,2,True,12.85,0.1321

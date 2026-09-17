@@ -73,6 +73,18 @@ class PreprocessingConfig:
             "border_pct": self.border_pct,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PreprocessingConfig":
+        """Reconstruct a config from a stored dict (DB round-trip).
+
+        Unknown keys are ignored so older stored dicts keep loading.
+        """
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        kwargs = dict(data)
+        if isinstance(kwargs.get("clahe_tile_grid"), list):
+            kwargs["clahe_tile_grid"] = tuple(kwargs["clahe_tile_grid"])
+        return cls(**{k: v for k, v in kwargs.items() if k in known})
+
 
 # ---------------------------------------------------------------------------
 # Predefined experiment configs (Section 12 of PROJECT_GUIDE.md)
@@ -137,6 +149,16 @@ class PipelineResult:
         return [s.name for s in self.intermediates]
 
 
+def list_configs() -> dict[str, dict[str, Any]]:
+    """Stable config registry for Phase 5/6: name -> JSON-safe dict.
+
+    Names are the stable identifiers — the archive layer maps them to
+    integer preprocessing_config_ids. Never rename a config after it has
+    been used in a logged experiment (reproducibility rule).
+    """
+    return {name: cfg.to_dict() for name, cfg in PRESET_CONFIGS.items()}
+
+
 # ---------------------------------------------------------------------------
 # Pipeline runner
 # ---------------------------------------------------------------------------
@@ -197,6 +219,12 @@ def run_pipeline(
         )
         current = _record(result)
 
+    # Stage 10 — deskewing (BEFORE binarization: warpAffine re-interpolates
+    # pixels, which would un-binarize an already-thresholded image)
+    if config.deskew:
+        result = deskew(current)
+        current = _record(result)
+
     # Stage 5/6 — binarization (pick one method per config)
     if config.binarize:
         if config.binarize_method == "adaptive":
@@ -212,11 +240,6 @@ def run_pipeline(
     # Stage 9 — border/background cleanup
     if config.cleanup_borders:
         result = cleanup_borders(current, border_pct=config.border_pct)
-        current = _record(result)
-
-    # Stage 10 — deskewing
-    if config.deskew:
-        result = deskew(current)
         current = _record(result)
 
     logger.info("Pipeline '%s' complete: %d stages run → %s",

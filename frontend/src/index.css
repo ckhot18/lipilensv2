@@ -109,3 +109,64 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ---- LipiLens app ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-size: 24px; margin: 0; }
+nav { display: flex; gap: 8px; }
+.tab {
+  background: none; border: 1px solid var(--border);
+  padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 16px; color: var(--text);
+}
+.tab.active { background: var(--accent-bg); border-color: var(--accent-border); color: var(--text-h); }
+main { padding: 12px 20px 32px; text-align: left; }
+.page { max-width: 960px; margin: 0 auto; }
+.muted { color: var(--text); }
+.small { font-size: 14px; }
+.footer { text-align: center; padding: 16px; border-top: 1px solid var(--border); }
+.card {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; margin: 16px 0; box-shadow: var(--shadow);
+}
+.form { display: flex; flex-direction: column; gap: 12px; }
+.form label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.form input, .form select, .form textarea,
+.card textarea, .toolbar input {
+  font: inherit; padding: 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
+}
+button {
+  font: inherit; padding: 10px 16px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--accent-border); background: var(--accent-bg); color: var(--text-h);
+}
+button:disabled { opacity: 0.55; cursor: wait; }
+button.ghost, button.link { background: none; border-color: var(--border); }
+.btnrow { display: flex; gap: 8px; margin-top: 8px; }
+.error { color: #b3261e; font-weight: 600; }
+.ok-text { color: #1a7f37; font-weight: 600; }
+.badge {
+  display: inline-block; font-size: 13px; padding: 2px 10px;
+  border-radius: 999px; border: 1px solid var(--border); vertical-align: middle;
+}
+.badge.ok { background: #e6f4ea; border-color: #1a7f37; color: #1a7f37; }
+.badge.warn { background: #fef7e0; border-color: #b7791f; color: #b7791f; }
+.imgrow { display: flex; gap: 16px; flex-wrap: wrap; }
+.imgrow figure { flex: 1 1 280px; margin: 8px 0; }
+.imgrow img, .preview { width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+.preview { max-width: 420px; }
+.transcript { white-space: pre-wrap; background: var(--code-bg); padding: 12px; border-radius: 8px; }
+.toolbar { display: flex; gap: 12px; align-items: center; margin: 12px 0; }
+.check { display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rowlink {
+  width: 100%; text-align: left; background: none;
+  border: 1px solid var(--border); display: flex; gap: 10px; align-items: center;
+}
+textarea { width: 100%; box-sizing: border-box; }
