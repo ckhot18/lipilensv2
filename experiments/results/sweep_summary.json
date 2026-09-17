@@ -1,0 +1,75 @@
+{
+  "n_rows": 140,
+  "by_config": {
+    "original": {
+      "n": 20,
+      "mean_cer": 0.3165,
+      "std_cer": 0.1509,
+      "mean_wer": 0.6883,
+      "std_wer": 0.2131,
+      "wins_vs_original": 0,
+      "ties": 20,
+      "losses": 0
+    },
+    "grayscale": {
+      "n": 20,
+      "mean_cer": 0.3165,
+      "std_cer": 0.1509,
+      "mean_wer": 0.6883,
+      "std_wer": 0.2131,
+      "wins_vs_original": 0,
+      "ties": 20,
+      "losses": 0
+    },
+    "denoised": {
+      "n": 20,
+      "mean_cer": 0.3206,
+      "std_cer": 0.147,
+      "mean_wer": 0.6922,
+      "std_wer": 0.2119,
+      "wins_vs_original": 8,
+      "ties": 1,
+      "losses": 11
+    },
+    "enhanced": {
+      "n": 20,
+      "mean_cer": 0.3284,
+      "std_cer": 0.1483,
+      "mean_wer": 0.686,
+      "std_wer": 0.2117,
+      "wins_vs_original": 5,
+      "ties": 5,
+      "losses": 10
+    },
+    "binarized": {
+      "n": 20,
+      "mean_cer": 0.3551,
+      "std_cer": 0.1608,
+      "mean_wer": 0.7234,
+      "std_wer": 0.2385,
+      "wins_vs_original": 3,
+      "ties": 0,
+      "losses": 17
+    },
+    "deskewed": {
+      "n": 20,
+      "mean_cer": 0.3316,
+      "std_cer": 0.1515,
+      "mean_wer": 0.6992,
+      "std_wer": 0.208,
+      "wins_vs_original": 3,
+      "ties": 9,
+      "losses": 8
+    },
+    "full_restoration": {
+      "n": 20,
+      "mean_cer": 0.359,
+      "std_cer": 0.1775,
+      "mean_wer": 0.7283,
+      "std_wer": 0.2068,
+      "wins_vs_original": 5,
+      "ties": 1,
+      "losses": 14
+    }
+  }
+}

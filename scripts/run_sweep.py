@@ -82,7 +82,28 @@ def main() -> None:
         done += 1
         print(f"[{done}/{len(jobs)}] {config} {mid} {dt:.1f}s "
               f"chars={nchars} {status} {err}"[:160], flush=True)
+        if status != "ok" and not _tunnel_alive():
+            print("TUNNEL DEAD (health probe failed) — stopping batch. "
+                  "Re-run later; finished hyps are kept (resume-safe).",
+                  flush=True)
+            break
     print("SWEEP BATCH DONE")
+
+
+def _tunnel_alive() -> bool:
+    """Fast liveness check so one dead tunnel doesn't burn every job."""
+    import sys as _sys
+    _sys.path.insert(0, str(PROJECT_ROOT))
+    try:
+        from backend import config as app_config
+        import requests
+        if app_config.INFERENCE_MODE != "colab":
+            return True
+        r = requests.get(
+            app_config.COLAB_ENDPOINT_URL.rstrip("/") + "/health", timeout=15)
+        return r.status_code == 200
+    except Exception:  # noqa: BLE001
+        return False
 
 
 if __name__ == "__main__":

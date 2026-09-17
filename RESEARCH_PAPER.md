@@ -14,6 +14,7 @@
 - **Dataset status:** REAL DATA 2026-09-17: 20 MoDeTrans samples (MT-001..MT-020, refs 73–203 chars) with expert ground truth in `data/raw/mode_trans/` + `data/evaluation/`. Plus the unprovenanced chart sample.
 - **Baseline status (n=20, original condition, Colab):** mean CER 0.317 / WER 0.688 — same ballpark as the card's self-reported 0.328 (NOT a comparison: train-split overlap, n=20 vs 204).
 - **Restoration comparison (first data):** EXP-003 on MT-002 only — original 0.099 → enhanced 0.121 → binarized 0.176 (WER flat 0.286). n=1 page, descriptive only; supports H3 directionally on clean samples.
+- **Sweep status (EXP-005 COMPLETE, 2026-09-17):** 140/140 calls (7 conditions × 20 pages). Headline: grayscale = perfect no-op control; binarized hurts (17/20 losses); full_restoration worst overall (0.359, 14/20 losses); denoise/enhance/deskew ≈ neutral; effects are page-dependent. Full story in `docs/PHASE8_REPORT.md`.
 - **Archive status (Phase 5, 2026-09-17):** SQLite schema live (`lipilens.db`, 3 tables, 0 rows) matching guide §16 + `image_sha256`; repository enforces AI-draft immutability and verify-only-writes-verified; 8/8 DB tests pass; `get_manuscript` refreshes collections (same-session staleness fixed and tested).
 - **API status (Phase 6, 2026-09-17):** routes live (upload→restore→transcribe→detail, list/search with pagination, idempotent re-upload, verify) with 9/9 stubbed API tests; static `/files` image serving; transcription failure preserves manuscript (503 path tested). LIVE end-to-end PASSED (real HTTP + real Colab + verify + search through the app).
 - **Flaws fixed this round:** Colab retry-with-backoff (proved live: 1 SSL blip auto-recovered, 17/17 batch); health probes Colab in colab mode; cache key now includes pinned model revisions (base 6628554…, adapter 5b9957d…); sync upload handler (no event-loop block); pagination; verify max-length; scratch dir moved out of served paths; deskew-before-binarize (full_restoration truly binary again, metrics regenerated).
@@ -248,7 +249,24 @@ per the append-only rule but no longer describes the current state.
 - **Conclusion:** baseline is now n=20 with mean CER 0.317 — same ballpark as card's 0.328, with the mandatory train-overlap caveat. Baseline variance (0.099–0.567) remains the dominant signal.
 - **Next action:** Phase 8 restoration sweep across the n=20 set (7 configs × 20 = 140 Colab calls — batch overnight or sample subset first).
 
-### EXP-005
+### EXP-005 (restoration sweep — 140/140 calls, COMPLETE)
+- **Date:** 2026-09-17 (multiple batches across Colab sessions)
+- **Objective:** core research question — CER/WER per preprocessing condition across all 20 pages.
+- **Dataset:** MT-001..MT-020.
+- **Input:** restored PNGs via `run_full_pipeline` per config (`data/processed/_pipeline/`).
+- **Preprocessing:** grayscale, denoised, enhanced, binarized, deskewed (n=20 each) + full_restoration (n=5, interrupted).
+- **Model:** Qwen2.5-VL-3B + Modi LoRA via Colab, pinned revisions; warm 15–58 s/call.
+- **Hardware:** Colab GPU (type unrecorded); 3 tunnel deaths during the day, all resumed without data loss.
+- **Parameters:** official card prompt; `max_new_tokens=256`, greedy.
+- **Result:** `experiments/results/sweep/EXP-005_*_hyp.txt`; `sweep_metrics.csv` (125 rows), `sweep_summary.json`.
+- **CER:** original 0.317 · grayscale 0.317 (20/20 ties) · denoised 0.321 (8/1/11) · enhanced 0.328 (5/5/10) · binarized 0.355 (3/0/17) · deskewed 0.332 (3/9/8) · full_restoration 0.359 (5/1/14 — worst overall, complete n=20).
+- **WER:** 0.686–0.723 across complete conditions (flat, char-level effects).
+- **Observations:** grayscale no-op control validates the chain; binarization clearly harmful; rest neutral; improvements cluster on high-baseline pages (H2-directional); degradations scattered across all configs. Full narrative in `docs/PHASE8_REPORT.md`.
+- **Files generated:** sweep hyps/CSVs/JSON, `docs/sweep_means.png`, `docs/sweep_heatmap.png`, `exp_log.csv` EXP-005-* rows (105).
+- **Conclusion:** on these clean pages, restoration does not help and binarization hurts — H1 rejected for this sample, H3 supported. Descriptive only (n=20, no tests).
+- **Next action:** sweep complete — optional degraded-pair robustness for H2; otherwise Phase 9/10 (paper consolidation, README, demo rehearsal).
+
+### EXP-006
 - **Date:** TO BE FILLED IN WHEN RUN
 - **Objective:** TO BE FILLED IN
 - **Dataset:** TO BE FILLED IN (which image(s))
@@ -314,12 +332,14 @@ where `S`, `D`, `I` are word-level substitutions/deletions/insertions, and `N` i
 | Original | MT-003 (MoDeTrans 1000.jpg) | 0.567 | 0.955 | EXP-002c |
 | Original | mean (n=3) | 0.279 | 0.541 | EXP-002 |
 | Original | mean (n=20, MT-001..MT-020) | 0.317 | 0.688 | EXP-002+004 |
-| Grayscale | TBD | TBD | TBD | TBD |
-| Denoised | TBD | TBD | TBD | TBD |
+| Grayscale | mean (n=20) | 0.317 | 0.688 | EXP-005 (20/20 ties — no-op control) |
+| Denoised | mean (n=20) | 0.321 | 0.692 | EXP-005 (8W/1T/11L) |
 | Enhanced (CLAHE) | MT-002 (MoDeTrans 10.jpg) | 0.121 | 0.286 | EXP-003a |
+| Enhanced (CLAHE) | mean (n=20) | 0.328 | 0.686 | EXP-005 (5W/5T/10L) |
 | Binarized | MT-002 (MoDeTrans 10.jpg) | 0.176 | 0.286 | EXP-003b |
-| Deskewed | TBD | TBD | TBD | TBD |
-| Full restoration | TBD | TBD | TBD | TBD |
+| Binarized | mean (n=20) | 0.355 | 0.723 | EXP-005 (3W/0T/17L) |
+| Deskewed | mean (n=20) | 0.332 | 0.699 | EXP-005 (3W/9T/8L) |
+| Full restoration | mean (n=20) | 0.359 | 0.728 | EXP-005 (5W/1T/14L — worst overall) |
 
 *No row in this table may be filled with an estimated or "expected" number — only a number that came from an actual computed CER/WER against a real reference transcription, cited by experiment ID.*
 
@@ -334,6 +354,8 @@ First data point (EXP-002, original condition only — not an ablation yet): per
 Update (EXP-003, MT-002 only): original 0.099 → enhanced 0.121 → binarized 0.176, WER flat at 0.286. First directional evidence for H3 on a clean sample (heavier processing hurts slightly at char level); n=1 page, no generalization claimed.
 
 Update (EXP-004, n=20 baseline): mean CER 0.317 / WER 0.688, range 0.099–0.567. Substitutions dominate every sample's error profile (S≫D,I) — an incorporates-observation difference from the adapter card's "deletions dominate (46%)" on their 204-example set; at n=20 with possible train overlap this is noted, not contested. Per-image numbers live in `experiments/results/baseline_n20_metrics.csv` (kept out of this table for readability). Baseline variance still dwarfs any restoration effect measured so far.
+
+Update (EXP-005 sweep COMPLETE, 140 rows): grayscale is a perfect no-op control (validates the chain); binarized hurts clearly (+0.038 mean CER, 17/20 losses); full_restoration is worst overall (0.359, 14/20 losses — stacked neutral stages compound into harm); denoise/enhance/deskew are neutral within noise; effects scatter by page, with improvements clustering on high-baseline pages (weak H2 direction). Verdict: H1 rejected on these pages, H3 supported — descriptive only. Product takeaway: default to `original`, offer restoration as an option. See `docs/PHASE8_REPORT.md`.
 
 ---
 
@@ -442,6 +464,7 @@ Nature of corrections:   [e.g. "one character substitution," "reordered a clause
 - **Confirmed 2026-09-17 (Phase 3/EXP-001):** the single sample is a 48-glyph character chart, NOT a continuous manuscript page — off-distribution for a document-trained adapter, so EXP-001 proves the pipeline runs, not that it reads real manuscripts well; no ground truth → qualitative only; Colab GPU type/VRAM/adapter-revision unrecorded; 73.6 s wall time includes cold-start (steady-state latency unknown); Colab session ephemerality means EXP-001 is re-runnable only while a matching runtime+tunnel exist — the saved JSON is the permanent record.
 - **Confirmed 2026-09-17 (EXP-002):** scores on MoDeTrans-train-split rows may be optimistic (adapter trained on this split — possible train-test overlap); n=3 short texts (91–120 chars), not a generalization claim; mean CER 0.279 is same-ballpark as the card's 0.328 but NOT a comparison; restoration conditions untested — the core research question is still open.
 - **Confirmed 2026-09-17 (EXP-004, n=20):** same train-overlap caveat at larger n; refs 73–203 chars — no truncation observed up to ~200 chars (longest hyp 202 chars), behavior beyond that untested; substitution-dominant profile differs from card's deletion-dominant claim (observation only); warm-call latency 15–55 s, cold ~70–150 s.
+- **Confirmed 2026-09-17 (EXP-005 sweep COMPLETE):** 140/140 across 5+ Colab sessions (revisions pinned, so cross-session pooling is valid); 4 tunnel deaths total, zero data loss via resume files; no statistical tests (n=20, descriptive); MoDeTrans pages are relatively clean — results say nothing about heavily degraded manuscripts, which is where restoration could still help (robustness study open).
 - **Confirmed 2026-09-17 (Phase 4/EXP-003):** integration validated (3 consecutive runs, no wiring faults); restoration comparison exists for ONE clean page only — degraded-page behavior may differ arbitrarily; run-1 hyp was lost to a CLI save bug (fixed; disclosed, not hidden).
 - **Confirmed 2026-09-17 (Phase 5):** schema via `create_all` (no migration tooling — acceptable single-user MVP scope, but schema changes later need manual handling); `ai_transcription` immutability enforced at repository level and covered by a dedicated test; LIKE search is substring-only (no FTS5 — P2).
 - **Confirmed 2026-09-17 (Phase 6 + infra):** no auth (single-user scope — do not expose publicly); inference runs synchronously inside the upload request (20–70 s, no background jobs); no pagination; no upload dedupe (sha stored, unused); `/api/health` reports the local model flag only (misleading in Colab mode); transcription cache key excludes model revision (a Colab-side model update would serve stale cache silently); Colab tunnel is a single point of failure with no client retry (observed: SSL EOF mid-batch + ngrok 404 on stale URL); max_new_tokens=256 truncation on long pages untested; new samples (MT-004..MT-010) same train-split optimism as before.

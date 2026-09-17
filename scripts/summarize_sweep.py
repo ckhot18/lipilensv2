@@ -112,7 +112,11 @@ def main() -> None:
     ax[1].set_xticks(list(x), present, rotation=20)
     ax[1].set_title("Mean WER ± std per condition")
     n = by_config[present[0]]["n"]
-    fig.suptitle(f"Phase 8 sweep — {n}/20 samples per condition "
+    fr_n = by_config.get("full_restoration", {}).get("n", 0)
+    subtitle = (f"{n}/20 samples per condition"
+                if all(by_config[c]["n"] == n for c in present)
+                else f"uneven coverage: full_restoration {fr_n}/20, rest {n}/20")
+    fig.suptitle(f"Phase 8 sweep — {subtitle} "
                  f"(descriptive, no significance claims)", fontsize=12)
     fig.tight_layout()
     fig.savefig(DOCS / "sweep_means.png", dpi=150)
