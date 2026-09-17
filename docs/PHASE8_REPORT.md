@@ -46,7 +46,7 @@
   Colab GPU; warm calls 15–58 s, cold ~70–150 s.
 - `scripts/run_sweep.py` (resume-by-file, per-call progress log, tunnel-death
   fail-fast added mid-sweep after one 15-minute burn), `scripts/summarize_sweep.py`.
-- 3 tunnel deaths total across the day; 125/140 calls banked; 15 pending.
+- 4 tunnel deaths total across the day; all 140 calls banked via resume-safe reruns.
 - Caveats (unchanged): train-split overlap (optimistic bias), short texts only,
   Colab GPU type unrecorded, no statistical tests at this n.
 
