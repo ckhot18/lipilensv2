@@ -11,8 +11,8 @@
 *Update this section every time something material changes. This is the fastest way for a future session (human or agent) to know where things actually stand.*
 
 - **Research question:** defined (Section 2) — not yet answered.
-- **Dataset status:** REAL DATA 2026-09-17: 20 MoDeTrans samples (MT-001..MT-020, refs 73–203 chars) with expert ground truth in `data/raw/mode_trans/` + `data/evaluation/`. Plus the unprovenanced chart sample.
-- **Baseline status (n=20, original condition, Colab):** mean CER 0.317 / WER 0.688 — same ballpark as the card's self-reported 0.328 (NOT a comparison: train-split overlap, n=20 vs 204).
+- **Dataset status:** REAL DATA 2026-09-17: 50 MoDeTrans samples (MT-001..MT-050, refs 60–205 chars) with expert ground truth in `data/raw/mode_trans/` + `data/evaluation/`. Judge showcase in `showcase/` (50 images + `GROUND_TRUTH.md` proof file). Plus the unprovenanced chart sample.
+- **Baseline status (n=50, original condition, Colab):** mean CER 0.304 / WER 0.645, range 0.026–0.912 — same ballpark as the card's self-reported 0.328 (NOT a comparison: train-split overlap, n=50 vs 204).
 - **Restoration comparison (first data):** EXP-003 on MT-002 only — original 0.099 → enhanced 0.121 → binarized 0.176 (WER flat 0.286). n=1 page, descriptive only; supports H3 directionally on clean samples.
 - **Sweep status (EXP-005 COMPLETE, 2026-09-17):** 140/140 calls (7 conditions × 20 pages). Headline: grayscale = perfect no-op control; binarized hurts (17/20 losses); full_restoration worst overall (0.359, 14/20 losses); denoise/enhance/deskew ≈ neutral; effects are page-dependent. Full story in `docs/PHASE8_REPORT.md`.
 - **Archive status (Phase 5, 2026-09-17):** SQLite schema live (`lipilens.db`, 3 tables, 0 rows) matching guide §16 + `image_sha256`; repository enforces AI-draft immutability and verify-only-writes-verified; 8/8 DB tests pass; `get_manuscript` refreshes collections (same-session staleness fixed and tested).
@@ -97,7 +97,7 @@ These are hypotheses — stated before results exist — **not conclusions**. Th
 
 - **Dataset name:** `historyHulk/MoDeTrans` subset (IIT Roorkee; paper: arXiv 2503.13060, accepted ICDAR 2025) + 1 unprovenanced chart sample. Paper claims 2,043 expert-transliterated real document images across Shivakalin/Peshwekalin/Anglakalin eras; we use 3.
 - **Source:** Hugging Face `historyHulk/MoDeTrans` (parquet, columns filename/image/text), fetched 2026-09-17 via `datasets` streaming. Manifest: `data/raw/mode_trans/MANIFEST.json` (MT-001←1.jpg, MT-002←10.jpg, MT-003←1000.jpg).
-- **Number of images:** 20 with ground truth (+ 1 chart sample without).
+- **Number of images:** 50 with ground truth (+ 1 chart sample without).
 - **Ground-truth availability:** expert Devanagari transliterations shipped with MoDeTrans, stored verbatim in `data/evaluation/MT-*.txt` (MT-001..MT-020). Ground-truth producer: dataset authors (expert-verified per paper); our confidence: taken as reference, not independently re-checked.
 - **Image properties:** real continuous Modi handwriting (verified visually for MT-002: 3 ruled lines with headline flourish); refs 91–120 chars.
 - **Train/test split:** not applicable — evaluation-only study, no model training (as anticipated).
@@ -266,7 +266,20 @@ per the append-only rule but no longer describes the current state.
 - **Conclusion:** on these clean pages, restoration does not help and binarization hurts — H1 rejected for this sample, H3 supported. Descriptive only (n=20, no tests).
 - **Next action:** sweep complete — optional degraded-pair robustness for H2; otherwise Phase 9/10 (paper consolidation, README, demo rehearsal).
 
-### EXP-006
+### EXP-006 (baseline extension to n=50 + judge showcase)
+- **Date:** 2026-09-17
+- **Objective:** 30 more original-condition transcriptions (MT-021..MT-050) + build `showcase/` proof folder.
+- **Dataset:** MT-021..MT-050 (refs 60–205 chars).
+- **Model/hardware/params:** as EXP-004 (Colab, warm, official prompt, greedy).
+- **Result:** `experiments/results/EXP-006_*_hyp.txt`, `EXP-006_metrics.{csv,json}`.
+- **CER:** mean 0.295 (n=30), range 0.026 (MT-048, near-perfect) to 0.912 (MT-038).
+- **WER:** in `EXP-006_metrics.csv`.
+- **Combined n=50:** mean CER 0.304 / WER 0.645, range 0.026–0.912.
+- **Files generated:** above + `showcase/images/MT-*.png` (50) + `showcase/GROUND_TRUTH.md` (image + expert reading + model output + CER per sample), `exp_log.csv` EXP-006-01..30.
+- **Conclusion:** larger-n baseline confirms the n=20 picture (0.304 vs 0.317); showcase gives judges image-by-image verifiable proof.
+- **Next action:** optional restoration sweep on the new 30 (840 more calls — only if a specific claim needs it).
+
+### EXP-007
 - **Date:** TO BE FILLED IN WHEN RUN
 - **Objective:** TO BE FILLED IN
 - **Dataset:** TO BE FILLED IN (which image(s))
@@ -332,6 +345,7 @@ where `S`, `D`, `I` are word-level substitutions/deletions/insertions, and `N` i
 | Original | MT-003 (MoDeTrans 1000.jpg) | 0.567 | 0.955 | EXP-002c |
 | Original | mean (n=3) | 0.279 | 0.541 | EXP-002 |
 | Original | mean (n=20, MT-001..MT-020) | 0.317 | 0.688 | EXP-002+004 |
+| Original | mean (n=50, MT-001..MT-050) | 0.304 | 0.645 | EXP-002+004+006 |
 | Grayscale | mean (n=20) | 0.317 | 0.688 | EXP-005 (20/20 ties — no-op control) |
 | Denoised | mean (n=20) | 0.321 | 0.692 | EXP-005 (8W/1T/11L) |
 | Enhanced (CLAHE) | MT-002 (MoDeTrans 10.jpg) | 0.121 | 0.286 | EXP-003a |
