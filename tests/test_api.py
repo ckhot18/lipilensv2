@@ -80,6 +80,13 @@ def test_upload_happy_path(client):
     assert body["transcription"]["verification_status"] == "pending"
 
 
+def test_list_includes_thumbnails(client):
+    _upload(client, title="Thumb page")
+    rows = client.get("/api/manuscripts").json()
+    assert rows and rows[0]["thumbnail_url"] is not None
+    assert rows[0]["thumbnail_url"].startswith("/files/raw/")
+
+
 def test_upload_rejects_non_image(client):
     r = client.post("/api/manuscripts",
                     files={"file": ("x.txt", io.BytesIO(b"hello"),

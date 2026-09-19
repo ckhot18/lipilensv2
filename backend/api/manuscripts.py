@@ -147,7 +147,9 @@ def list_manuscripts(search: str | None = None,
     rows = rows[offset:offset + limit]
     return [ManuscriptSummary(id=r.id, title=r.title,
                               identifier=r.identifier, status=r.status,
-                              verified=(r.status == "verified")) for r in rows]
+                              verified=(r.status == "verified"),
+                              thumbnail_url=_image_url(
+                                  r.original_image_path)) for r in rows]
 
 
 @router.get("/{manuscript_id}", response_model=ManuscriptDetail)

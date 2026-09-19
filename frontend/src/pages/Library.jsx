@@ -6,11 +6,20 @@ import {
   verifyTranscription,
 } from "../api/client";
 
-export default function Library() {
-  const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
+const PAGE = 8;
+const FILTERS = [
+  ["all", "All"],
+  ["verified", "Verified"],
+  ["review", "Needs Review"],
+];
+
+export default function Library({ initialQuery = "" }) {
+  const [query, setQuery] = useState(initialQuery);
+  const [debounced, setDebounced] = useState(initialQuery);
+  const [filter, setFilter] = useState("all");
   const [items, setItems] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -19,7 +28,10 @@ export default function Library() {
 
   useEffect(() => {
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => setDebounced(query), 400);
+    timer.current = setTimeout(() => {
+      setDebounced(query);
+      setOffset(0);
+    }, 400);
     return () => clearTimeout(timer.current);
   }, [query]);
 
@@ -29,10 +41,15 @@ export default function Library() {
       try {
         const rows = await listManuscripts({
           search: debounced || undefined,
-          verifiedOnly,
+          verifiedOnly: filter === "verified" ? true : undefined,
+          limit: PAGE,
+          offset,
         });
+        let visible = rows;
+        if (filter === "review") visible = rows.filter((m) => !m.verified);
         if (!cancelled) {
-          setItems(rows);
+          setItems((prev) => (offset === 0 ? visible : [...prev, ...visible]));
+          setHasMore(rows.length === PAGE);
           setError("");
         }
       } catch (err) {
@@ -40,20 +57,7 @@ export default function Library() {
       }
     })();
     return () => { cancelled = true; };
-  }, [debounced, verifiedOnly]);
-
-  async function refresh() {
-    try {
-      const rows = await listManuscripts({
-        search: debounced || undefined,
-        verifiedOnly,
-      });
-      setItems(rows);
-      setError("");
-    } catch (err) {
-      setError(err.message);
-    }
-  }
+  }, [debounced, filter, offset]);
 
   async function openDetail(id) {
     setError("");
@@ -75,7 +79,7 @@ export default function Library() {
       const ms = await getManuscript(selected.id);
       setSelected(ms);
       setEditing(false);
-      refresh();
+      setOffset(0);
     } catch (err) {
       setError(err.message);
     }
@@ -85,38 +89,59 @@ export default function Library() {
 
   return (
     <section className="page">
-      <h2>My Library</h2>
+      <p className="kicker">EXPLORE · SEARCH · LEARN</p>
+      <h2 className="display-sm">Manuscript Library</h2>
+      <p className="subtitle">
+        A growing collection of historical documents, restored and transcribed
+        using AI. Browse, search, and explore India&apos;s written heritage.
+      </p>
+
+      <div className="chips">
+        {FILTERS.map(([key, label]) => (
+            <button
+              key={key}
+              className={filter === key ? "chip active" : "chip"}
+              onClick={() => { setFilter(key); setOffset(0); }}
+            >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="toolbar">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search title, identifier, or text…"
+          placeholder="Search by title, keyword, identifier…"
         />
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={verifiedOnly}
-            onChange={(e) => setVerifiedOnly(e.target.checked)}
-          />
-          Verified only
-        </label>
       </div>
       {error && <p className="error">{error}</p>}
 
       {!selected && (
-        <ul className="list">
-          {items.map((m) => (
-            <li key={m.id}>
-              <button className="rowlink" onClick={() => openDetail(m.id)}>
-                <strong>#{m.id} {m.title}</strong>
-                <span className={m.verified ? "badge ok" : "badge warn"}>
-                  {m.verified ? "Verified" : "Pending review"}
+        <>
+          <div className="grid cards4">
+            {items.map((m) => (
+              <button key={m.id} className="mscard" onClick={() => openDetail(m.id)}>
+                {m.thumbnail_url && (
+                  <img className="mscard-img" src={imgUrl(m.thumbnail_url)} alt={m.title} loading="lazy" />
+                )}
+                <span className={m.verified ? "badge ok floating" : "badge warn floating"}>
+                  {m.verified ? "Verified" : "Needs Review"}
                 </span>
+                <span className="mscard-title">{m.title}</span>
+                <span className="muted small">#{m.id} · {m.identifier || m.status}</span>
               </button>
-            </li>
-          ))}
-          {items.length === 0 && <li className="muted">No manuscripts found.</li>}
-        </ul>
+            ))}
+          </div>
+          {items.length === 0 && <p className="muted">No manuscripts found.</p>}
+          {hasMore && items.length > 0 && (
+            <div style={{ textAlign: "center", marginTop: 16 }}>
+              <button className="ghost" onClick={() => setOffset((o) => o + PAGE)}>
+                Load More ↓
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {selected && (
@@ -145,16 +170,10 @@ export default function Library() {
           <h4>Verified transcription</h4>
           {editing ? (
             <>
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                rows={6}
-              />
+              <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={6} />
               <div className="btnrow">
                 <button onClick={saveVerification}>Save verification</button>
-                <button className="ghost" onClick={() => setEditing(false)}>
-                  Cancel
-                </button>
+                <button className="ghost" onClick={() => setEditing(false)}>Cancel</button>
               </div>
             </>
           ) : (
