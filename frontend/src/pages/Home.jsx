@@ -12,7 +12,7 @@ const SAMPLES = [
 
 const FEATURES = [
   ["◈", "Image Restoration", "Remove noise, enhance faded text"],
-  ["🇹", "AI Transcription", "Convert Modi Lipi to readable text"],
+  ["अ", "AI Transcription", "Convert Modi Lipi to readable text"],
   ["ⓘ", "Human Verification", "Keep historians in the loop"],
   ["☁", "Open Research", "Built for a more accessible past"],
 ];

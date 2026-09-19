@@ -48,6 +48,7 @@ body {
 /* ---- header ---- */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
   padding: 14px 28px; border-bottom: 1px solid var(--border);
   background: var(--card);
 }
@@ -202,6 +203,11 @@ textarea { width: 100%; }
 
 /* ---- sample tester ---- */
 .sampletabs { margin-bottom: 10px; }
+.sampletab {
+  display: inline-block; font-size: 14px; font-weight: 700;
+  padding: 8px 16px; border-radius: 9px;
+  background: var(--gold-soft); border: 1px solid var(--border);
+}
 .sampletab { font-family: var(--sans); font-size: 14px; }
 .thumbrow { display: flex; gap: 12px; margin: 14px 0; flex-wrap: wrap; }
 .thumb {
@@ -239,7 +245,14 @@ textarea { width: 100%; }
   font-family: var(--sans); font-size: 14px;
 }
 .mscard-img { width: 100%; height: 170px; object-fit: cover; border-radius: 8px; }
-.badge.floating { position: absolute; left: 16px; bottom: 64px; }
+.badge.floating { position: absolute; left: 18px; top: 18px; }
+.card h3 { font-family: var(--serif); font-size: 20px; margin: 6px 0 10px; }
+h4 { margin: 14px 0 6px; }
+@media (max-width: 700px) {
+  .hsearch { width: 150px; }
+  main { padding: 18px 14px 30px; }
+  .panelhead { flex-wrap: wrap; }
+}
 .mscard-title { font-weight: 700; }
 .hsearch {
   font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 999px;

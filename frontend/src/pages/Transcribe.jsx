@@ -10,10 +10,18 @@ const MAX_BYTES = 20 * 1024 * 1024;
 
 function CompareSlider({ original, restored, restoredLabel }) {
   const [pos, setPos] = useState(50);
-  if (!original || !restored) {
+  if (!original) {
     return (
       <div className="compare-empty">
         The restored image will appear here after transcription.
+      </div>
+    );
+  }
+  if (!restored) {
+    return (
+      <div className="compare">
+        <img src={original} alt="Selected manuscript" />
+        <span className="tag left">Original</span>
       </div>
     );
   }
@@ -60,6 +68,10 @@ export default function Transcribe() {
     setNotice("");
     setResult(null);
     setVerified(false);
+    if (preview) {
+      URL.revokeObjectURL(preview);
+      setPreview(null);
+    }
     if (!f) {
       setFile(null);
       setPreview(null);
@@ -158,7 +170,12 @@ export default function Transcribe() {
             ) : (
               <>
                 <p>Drag &amp; drop an image here<br />or</p>
-                <button type="button">Choose File</button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); fileInput.current?.click(); }}
+                >
+                  Choose File
+                </button>
               </>
             )}
             <input

@@ -160,10 +160,12 @@ export default function Library({ initialQuery = "" }) {
               <figcaption>Original</figcaption>
               <img src={imgUrl(selected.original_image_url)} alt="Original manuscript" />
             </figure>
-            <figure>
-              <figcaption>Restored</figcaption>
-              <img src={imgUrl(selected.restored_image_url)} alt="Restored manuscript" />
-            </figure>
+            {selected.restored_image_url && (
+              <figure>
+                <figcaption>Restored</figcaption>
+                <img src={imgUrl(selected.restored_image_url)} alt="Restored manuscript" />
+              </figure>
+            )}
           </div>
           <h4>AI transcription (immutable draft)</h4>
           <p className="transcript">{tr?.ai_transcription || "—"}</p>
