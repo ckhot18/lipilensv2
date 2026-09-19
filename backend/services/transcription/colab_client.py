@@ -1,7 +1,9 @@
-import logging
-import requests
 import base64
+import logging
+import time
 from pathlib import Path
+
+import requests
 
 from backend.config import COLAB_ENDPOINT_URL
 from backend.services.transcription.inference import TranscriptionResult, TranscriptionService
@@ -48,8 +50,7 @@ class ColabTranscriptionService(TranscriptionService):
                 logger.warning("Colab attempt %d/3 failed (%s); backing off",
                                attempt, type(e).__name__)
                 if attempt < 3:
-                    import time as _time
-                    _time.sleep(5 * attempt)
+                    time.sleep(5 * attempt)
         else:
             logger.error(f"Colab transcription failed after 3 attempts: "
                          f"{last_exc}")

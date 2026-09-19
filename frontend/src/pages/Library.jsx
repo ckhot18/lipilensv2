@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getManuscript,
   imgUrl,
@@ -23,22 +23,37 @@ export default function Library() {
     return () => clearTimeout(timer.current);
   }, [query]);
 
-  const refresh = useCallback(async () => {
-    setError("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listManuscripts({
+          search: debounced || undefined,
+          verifiedOnly,
+        });
+        if (!cancelled) {
+          setItems(rows);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [debounced, verifiedOnly]);
+
+  async function refresh() {
     try {
       const rows = await listManuscripts({
         search: debounced || undefined,
         verifiedOnly,
       });
       setItems(rows);
+      setError("");
     } catch (err) {
       setError(err.message);
     }
-  }, [debounced, verifiedOnly]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  }
 
   async function openDetail(id) {
     setError("");

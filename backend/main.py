@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.config import CORS_ORIGINS, DATA_DIR, PROCESSED_DATA_DIR, RAW_DATA_DIR
+from backend.config import CORS_ORIGINS, PROCESSED_DATA_DIR, RAW_DATA_DIR
 from backend.api import health, manuscripts, transcriptions
 from backend.database.session import init_db
 
