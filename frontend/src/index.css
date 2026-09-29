@@ -1,37 +1,37 @@
 /* LipiLens heritage theme (light default, dark via [data-theme="dark"]). */
 :root {
-  --paper: #faf8f3;
+  --paper: #f5f5f7;
   --card: #ffffff;
-  --ink: #2b2620;
-  --muted: #7a7264;
-  --border: #e8e0d2;
-  --dashed: #b9ab8d;
-  --gold: #a87f2e;
-  --gold-soft: rgba(168, 127, 46, 0.12);
-  --btn-dark: #1e3a2f;
-  --btn-dark-hover: #2a4f40;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --border: #d2d2d7;
+  --dashed: #aeaeb2;
+  --gold: #0071e3;
+  --gold-soft: rgba(0, 113, 227, 0.09);
+  --btn-dark: #0071e3;
+  --btn-dark-hover: #0077ed;
   --ok-bg: #e6f4ea;
   --ok-fg: #1a7f37;
   --warn-bg: #f5e6bd;
   --warn-fg: #7a5200;
   --err: #b3261e;
-  --serif: Georgia, "Palatino Linotype", "Times New Roman", serif;
-  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  --serif: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
 }
 
 [data-theme="dark"] {
-  --paper: #1c1a16;
-  --card: #26231d;
-  --ink: #ece4d2;
-  --muted: #a79c86;
-  --border: #3d382c;
-  --dashed: #6b6250;
-  --gold: #d0a24a;
-  --gold-soft: rgba(208, 162, 74, 0.15);
-  --btn-dark: #d0a24a;
-  --btn-dark-hover: #e2b968;
-  --ok-bg: rgba(26, 127, 55, 0.2);
-  --warn-bg: rgba(183, 121, 31, 0.2);
+  --paper: #000000;
+  --card: #1d1d1f;
+  --ink: #f5f5f7;
+  --muted: #86868b;
+  --border: #38383a;
+  --dashed: #636366;
+  --gold: #2997ff;
+  --gold-soft: rgba(41, 151, 255, 0.14);
+  --btn-dark: #2997ff;
+  --btn-dark-hover: #53a9ff;
+  --ok-bg: rgba(26, 127, 55, 0.25);
+  --warn-bg: rgba(183, 121, 31, 0.25);
 }
 
 * { box-sizing: border-box; }
@@ -47,11 +47,21 @@ body {
 
 /* ---- header ---- */
 .topbar {
+  position: sticky; top: 0; z-index: 50;
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; flex-wrap: wrap;
-  padding: 14px 28px; border-bottom: 1px solid var(--border);
-  background: var(--card);
+  padding: 12px 28px; border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
 }
+[data-theme="dark"] .topbar { background: rgba(0, 0, 0, 0.72); }
+nav { display: flex; gap: 4px; }
+.tab {
+  background: none; border: none; padding: 8px 14px; cursor: pointer;
+  font-size: 15px; color: var(--muted); border-radius: 980px;
+}
+.tab:hover { color: var(--ink); background: none; }
+.tab.active { color: var(--ink); font-weight: 600; }
 .brandwrap { display: flex; align-items: center; gap: 12px; }
 .brandmark {
   width: 40px; height: 40px; border-radius: 10px;
@@ -60,7 +70,7 @@ body {
   font-family: var(--serif); font-size: 26px;
   border: 1px solid var(--border);
 }
-.brand { font-family: var(--serif); font-size: 30px; margin: 0; font-weight: 700; }
+.brand { margin: 0; font-weight: 700; }
 .brand .lens { color: var(--gold); font-weight: 400; }
 .tagline { margin: 0; font-size: 13px; color: var(--muted); }
 .topright { display: flex; align-items: center; gap: 16px; }
@@ -106,8 +116,8 @@ main { flex: 1; padding: 26px 34px 40px; min-width: 0; }
 /* ---- cards / forms ---- */
 .card {
   background: var(--card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 20px; margin: 18px 0;
-  box-shadow: 0 2px 10px rgba(80, 60, 20, 0.06);
+  border-radius: 18px; padding: 22px; margin: 18px 0;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.05);
 }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
@@ -123,15 +133,14 @@ main { flex: 1; padding: 26px 34px 40px; min-width: 0; }
 .form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
 .form label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
 .form input, .form select, .form textarea, .card textarea, .toolbar input {
-  font: inherit; font-weight: 400; padding: 10px 12px; border-radius: 9px;
+  font: inherit; font-weight: 400; padding: 11px 14px; border-radius: 12px;
   border: 1px solid var(--border); background: var(--paper); color: var(--ink);
 }
 button, .btn {
-  font: inherit; padding: 11px 22px; border-radius: 9px; cursor: pointer;
+  font: inherit; padding: 10px 24px; border-radius: 980px; cursor: pointer;
   border: none; background: var(--btn-dark); color: #fff;
-  font-family: var(--serif); font-size: 16px;
+  font-size: 15px; font-weight: 600;
 }
-[data-theme="dark"] button, [data-theme="dark"] .btn { color: #1c1a16; }
 button:hover:not(:disabled) { background: var(--btn-dark-hover); }
 button:disabled { opacity: 0.6; cursor: wait; }
 button.ghost, button.link {
@@ -175,8 +184,9 @@ textarea { width: 100%; }
   letter-spacing: 3px; font-size: 12px; color: var(--muted);
   font-weight: 700; margin: 6px 0 10px;
 }
-.display { font-family: var(--serif); font-size: 52px; line-height: 1.1; margin: 0 0 14px; }
-.display-sm { font-family: var(--serif); font-size: 40px; margin: 0 0 8px; }
+.display { font-weight: 700; font-size: 54px; letter-spacing: -0.02em; line-height: 1.08; margin: 0 0 14px; }
+.display-sm { font-weight: 700; font-size: 40px; letter-spacing: -0.015em; margin: 0 0 8px; }
+.brand { font-size: 24px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 @media (max-width: 900px) { .display { font-size: 36px; } }
 .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; margin: 8px 0 6px; }
 @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
@@ -231,10 +241,9 @@ textarea { width: 100%; }
 .chips { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
 .chip {
   background: var(--card); border: 1px solid var(--border); color: var(--ink);
-  font-family: var(--sans); font-size: 14px; padding: 8px 18px; border-radius: 9px;
+  font-size: 14px; padding: 8px 20px; border-radius: 980px;
 }
-.chip.active { background: var(--btn-dark); border-color: var(--btn-dark); color: #fff; }
-[data-theme="dark"] .chip.active { color: #1c1a16; }
+.chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
 .grid.cards4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 @media (max-width: 1100px) { .grid.cards4 { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 600px) { .grid.cards4 { grid-template-columns: 1fr; } }

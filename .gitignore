@@ -23,6 +23,7 @@ huggingface_cache/
 *.env.local
 
 # Generated data (keep folder structure, ignore contents)
+demo_images/
 data/raw/*
 !data/raw/.gitkeep
 data/processed/*
