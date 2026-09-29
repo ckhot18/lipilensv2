@@ -70,7 +70,7 @@ train-split overlap disclosed in the paper. Full per-sample data:
 Prerequisites: Python 3.12, Node 22+, a free Google Colab account (GPU).
 
 ```bash
-git clone https://github.com/<you>/lipilensv2.git
+git clone https://github.com/ckhot18/lipilensv2.git
 cd lipilensv2
 
 python -m venv .venv && .\.venv\Scripts\activate
