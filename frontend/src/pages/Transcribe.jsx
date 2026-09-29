@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import ReactCompareImage from "react-compare-image";
 import {
   PRESET_CONFIGS,
   imgUrl,
@@ -9,7 +10,6 @@ import {
 const MAX_BYTES = 20 * 1024 * 1024;
 
 function CompareSlider({ original, restored, restoredLabel }) {
-  const [pos, setPos] = useState(50);
   if (!original) {
     return (
       <div className="compare-empty">
@@ -19,30 +19,21 @@ function CompareSlider({ original, restored, restoredLabel }) {
   }
   if (!restored) {
     return (
-      <div className="compare">
+      <div className="compareslot">
         <img src={original} alt="Selected manuscript" />
         <span className="tag left">Original</span>
       </div>
     );
   }
   return (
-    <div className="compare">
-      <img src={original} alt="Original manuscript" />
-      <div className="after" style={{ clipPath: `inset(0 0 0 ${pos}%)` }}>
-        <img src={restored} alt="Restored manuscript" />
-      </div>
-      <span className="tag left">Original</span>
-      <span className="tag right">{restoredLabel}</span>
-      <div className="handle" style={{ left: `${pos}%` }}>
-        <div className="knob">‹ ›</div>
-      </div>
-      <input
-        type="range"
-        min="0"
-        max="100"
-        value={pos}
-        onChange={(e) => setPos(Number(e.target.value))}
-        aria-label="Comparison slider"
+    <div className="compareslot" data-testid="compare-slider">
+      <ReactCompareImage
+        leftImage={original}
+        rightImage={restored}
+        leftImageLabel="Original"
+        rightImageLabel={restoredLabel || "Restored"}
+        sliderLineColor="#ffffff"
+        handle={<button className="rc-handle" aria-label="Drag to compare">‹ ›</button>}
       />
     </div>
   );

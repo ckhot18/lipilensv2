@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "react": "^19.2.8",
+    "react-compare-image": "^3.5.22",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
