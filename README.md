@@ -74,6 +74,7 @@ git clone https://github.com/ckhot18/lipilensv2.git
 cd lipilensv2
 
 python -m venv .venv && .\.venv\Scripts\activate
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 pip install -r requirements.txt
 cp .env.example .env        # set COLAB_ENDPOINT_URL + INFERENCE_MODE=colab
 ```
