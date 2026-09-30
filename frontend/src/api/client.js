@@ -10,7 +10,8 @@ export function imgUrl(path) {
 }
 
 async function request(path, options = {}) {
-  const res = await fetch(BASE + path, options);
+  const controller = AbortSignal.timeout(120000);
+  const res = await fetch(BASE + path, { ...options, signal: controller });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try {

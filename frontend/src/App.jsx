@@ -5,6 +5,7 @@ import Library from "./pages/Library.jsx";
 import Transcribe from "./pages/Transcribe.jsx";
 
 const TABS = [
+  ["transcribe", "Transcribe"],
   ["home", "Home"],
   ["library", "Library"],
   ["about", "About"],
@@ -75,7 +76,7 @@ export default function App() {
       <div className="body">
         <main className="full">
           {tab === "home" && <Home go={go} />}
-          {tab === "transcribe" && <Transcribe />}
+          {tab === "transcribe" && <Transcribe go={go} />}
           {tab === "library" && <Library key={globalQuery} initialQuery={globalQuery} />}
           {tab === "about" && <About />}
         </main>
