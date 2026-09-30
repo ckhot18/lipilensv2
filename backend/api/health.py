@@ -39,4 +39,20 @@ def check_health():
                         r.json().get("model_loaded"))
             except Exception:  # noqa: BLE001
                 pass  # unreachable is itself the signal; stay fast
+
+        # Determine status for colab mode
+        if not app_config.COLAB_ENDPOINT_URL:
+            body["status"] = "degraded"
+            body["reason"] = "colab endpoint not configured"
+        elif not body["colab_reachable"]:
+            body["status"] = "degraded"
+            body["reason"] = "colab endpoint unreachable"
+        elif not body["colab_model_loaded"]:
+            body["status"] = "degraded"
+            body["reason"] = "colab model not loaded"
+    else:
+        # local mode: degrade if model not loaded
+        if not _model_loaded:
+            body["status"] = "degraded"
+            body["reason"] = "local model not loaded"
     return body
