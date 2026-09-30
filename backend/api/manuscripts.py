@@ -59,7 +59,8 @@ def upload_manuscript(
     file: UploadFile,
     title: str | None = Form(default=None),
     identifier: str | None = Form(default=None),
-    config_name: str = Form(default="full_restoration"),
+    config_name: str = Form(default="original"),
+    transcribe: bool = Form(default=True),
     session: Session = Depends(get_db),
 ):
     # NOTE: sync def (not async) — FastAPI runs this in a threadpool, so the
@@ -109,10 +110,19 @@ def upload_manuscript(
         session, config_name, PRESET_CONFIGS[config_name].to_dict())
 
     # --- restore + transcribe (model errors -> 503, work preserved) ---------
+    # With transcribe=false this is the instant "clean it" act: restoration
+    # only (~0.2 s), no model call. The frontend then calls
+    # POST /{id}/transcribe for the slow reading act.
     try:
-        out = pipeline_mod.run_full_pipeline(
-            original_path, config_name,
-            output_dir=app_config.PROCESSED_DATA_DIR / str(ms.id))
+        if transcribe:
+            out = pipeline_mod.run_full_pipeline(
+                original_path, config_name,
+                output_dir=app_config.PROCESSED_DATA_DIR / str(ms.id))
+        else:
+            r = pipeline_mod.restore_only(
+                original_path, config_name,
+                output_dir=app_config.PROCESSED_DATA_DIR / str(ms.id))
+            out = None
     except Exception as exc:  # noqa: BLE001
         session.commit()  # keep manuscript + original through restoration
         logger.exception("Transcription failed for manuscript %s", ms.id)
@@ -120,17 +130,58 @@ def upload_manuscript(
             503, f"Transcription failed ({type(exc).__name__}); manuscript "
                  f"{ms.id} and its images are preserved") from exc
 
-    repo.mark_restored(session, ms.id, out.restored_image_path, cfg_row.id)
-    if out.restoration_warning:
-        logger.warning("Manuscript %s: %s", ms.id, out.restoration_warning)
-    repo.create_transcription(
-        session, ms.id, ai_text=out.transcription,
-        model_name=out.model_name, inference_mode=out.inference_mode,
-        config_id=cfg_row.id)
+    if transcribe:
+        repo.mark_restored(session, ms.id, out.restored_image_path,
+                           cfg_row.id)
+        if out.restoration_warning:
+            logger.warning("Manuscript %s: %s", ms.id,
+                           out.restoration_warning)
+        repo.create_transcription(
+            session, ms.id, ai_text=out.transcription,
+            model_name=out.model_name, inference_mode=out.inference_mode,
+            config_id=cfg_row.id)
+    else:
+        repo.mark_restored(session, ms.id, r.restored_image_path, cfg_row.id)
+        if r.restoration_warning:
+            logger.warning("Manuscript %s: %s", ms.id,
+                           r.restoration_warning)
     session.commit()
-    logger.info("Manuscript %s done via %s (%s)", ms.id, out.inference_mode,
-                config_name)
+    logger.info("Manuscript %s uploaded via %s (transcribe=%s)", ms.id,
+                config_name, transcribe)
     return _to_detail(repo.get_manuscript(session, ms.id))
+
+
+@router.post("/{manuscript_id}/transcribe", response_model=ManuscriptDetail)
+def transcribe_manuscript(manuscript_id: int,
+                          session: Session = Depends(get_db)):
+    """Second act: run the model on an already-restored manuscript."""
+    from backend.services.pipeline import DEFAULT_PROMPT
+
+    row = repo.get_manuscript(session, manuscript_id)
+    if row is None:
+        raise HTTPException(404, "Manuscript not found")
+    if not row.restored_image_path:
+        raise HTTPException(409, "Manuscript has no restored image yet")
+    if row.transcriptions:
+        # Idempotent: reading twice must not duplicate rows.
+        return _to_detail(row)
+    raw = Path(row.original_image_path).read_bytes()
+    cfg_name = (row.config.name if row.config else "full_restoration")
+    try:
+        t = pipeline_mod.transcribe_only(
+            row.restored_image_path, raw,
+            PRESET_CONFIGS[cfg_name].to_dict(), DEFAULT_PROMPT)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Transcription failed for manuscript %s",
+                         manuscript_id)
+        raise HTTPException(
+            503, f"Transcription failed ({type(exc).__name__})") from exc
+    repo.create_transcription(
+        session, manuscript_id, ai_text=t.transcription,
+        model_name=t.model_name, inference_mode=t.inference_mode,
+        config_id=row.preprocessing_config_id)
+    session.commit()
+    return _to_detail(repo.get_manuscript(session, manuscript_id))
 
 
 @router.get("", response_model=list[ManuscriptSummary])

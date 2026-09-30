@@ -3,6 +3,7 @@ import ReactCompareImage from "react-compare-image";
 import {
   PRESET_CONFIGS,
   imgUrl,
+  transcribeManuscript,
   uploadManuscript,
   verifyTranscription,
 } from "../api/client";
@@ -39,13 +40,14 @@ function CompareSlider({ original, restored, restoredLabel }) {
   );
 }
 
-export default function Transcribe() {
+export default function Transcribe({ go }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [phase, setPhase] = useState("idle"); // idle|cleaning|reading|cleaned|done
   const [title, setTitle] = useState("");
   const [identifier, setIdentifier] = useState("");
-  const [configName, setConfigName] = useState("full_restoration");
+  const [configName, setConfigName] = useState("original");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -83,18 +85,43 @@ export default function Transcribe() {
   async function onSubmit(e) {
     e.preventDefault();
     if (!file || busy) return;
+    // Act 1 — clean it (fast, local): upload with transcribe=false so the
+    // restored image + slider appear in ~1s, archived immediately.
     setBusy(true);
+    setPhase("cleaning");
     setError("");
     setNotice("");
     setResult(null);
     setVerified(false);
+    let ms;
     try {
-      const ms = await uploadManuscript(file, { title, identifier, configName });
+      ms = await uploadManuscript(file, { title, identifier, configName, transcribe: false });
       setResult(ms);
-      setDraft(ms.transcription?.ai_transcription || "");
-      if (ms.duplicate) setNotice("Identical image + pipeline already archived — showing the existing record.");
+      if (ms.duplicate) {
+        setNotice("Identical image + pipeline already archived — showing the existing record.");
+      }
     } catch (err) {
       setError(err.message);
+      setBusy(false);
+      setPhase("idle");
+      return;
+    }
+    // Act 2 — read it (slow, GPU): only if no transcription exists yet.
+    if (ms.transcription) {
+      setDraft(ms.transcription.ai_transcription || "");
+      setBusy(false);
+      setPhase("done");
+      return;
+    }
+    setPhase("reading");
+    try {
+      const full = await transcribeManuscript(ms.id);
+      setResult(full);
+      setDraft(full.transcription?.ai_transcription || "");
+      setPhase("done");
+    } catch (err) {
+      setError(err.message + " — the cleaned image is safe in your library.");
+      setPhase("cleaned");
     } finally {
       setBusy(false);
     }
@@ -215,9 +242,12 @@ export default function Transcribe() {
         </div>
       </div>
 
-      {busy && (
+      {phase === "cleaning" && (
+        <p className="muted" role="status">Cleaning the image… (about a second)</p>
+      )}
+      {phase === "reading" && (
         <p className="muted" role="status">
-          Restoring image and running transcription… 20–70 seconds on the Colab GPU. Please wait.
+          Cleaned in a flash ✓ — archived. Now the AI is reading… 20–70 seconds on the Colab GPU.
         </p>
       )}
       {error && <p className="error">{error}</p>}
@@ -225,6 +255,14 @@ export default function Transcribe() {
 
       {result && (
         <div className="card">
+          <p className="ok-text">
+            Saved to your library as #{result.id}{" "}
+            {go && (
+              <button className="toolbtn" onClick={() => go("library")}>
+                Open in Library →
+              </button>
+            )}
+          </p>
           <div className="panelhead">
             <h3>
               Transcribed Text{" "}

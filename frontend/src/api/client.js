@@ -28,13 +28,18 @@ async function request(path, options = {}) {
   return res.json();
 }
 
-export function uploadManuscript(file, { title, identifier, configName }) {
+export function uploadManuscript(file, { title, identifier, configName, transcribe = true }) {
   const form = new FormData();
   form.append("file", file);
   if (title) form.append("title", title);
   if (identifier) form.append("identifier", identifier);
-  form.append("config_name", configName || "full_restoration");
+  form.append("config_name", configName || "original");
+  form.append("transcribe", transcribe ? "true" : "false");
   return request("/api/manuscripts", { method: "POST", body: form });
+}
+
+export function transcribeManuscript(id) {
+  return request(`/api/manuscripts/${id}/transcribe`, { method: "POST" });
 }
 
 export function listManuscripts({ search, verifiedOnly, limit = 50, offset = 0 } = {}) {
