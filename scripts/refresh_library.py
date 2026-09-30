@@ -32,12 +32,13 @@ for i in range(21, 51):
 
 MODEL_NAME = "Qwen2.5-VL-3B + lgtk/qwen25vl-3b-modi-synth-lora"
 
-# Which 4 to verify — spread across the set (indices 1, 4, 7, 10 -> MT-003, MT-011, MT-019, MT-044)
-VERIFY_INDICES = [1, 4, 7, 10]
+# Pick 4 manuscripts spread across the set for verification
+# Indices: 0, 3, 6, 9 -> MT-002, MT-010, MT-015, MT-044
+VERIFY_INDICES = [0, 3, 6, 9]
 
 
 def delete_orphan_manuscripts(session, dry_run: bool) -> list[int]:
-    """Delete manuscripts with zero transcriptions and their data dirs."""
+    """Delete manuscripts with zero transcriptions or status=uploaded, and their data dirs."""
     deleted_ids = []
     orphans = session.query(Manuscript).outerjoin(
         Transcription, Transcription.manuscript_id == Manuscript.id
@@ -45,9 +46,14 @@ def delete_orphan_manuscripts(session, dry_run: bool) -> list[int]:
         Transcription.id.is_(None)
     ).all()
 
-    for ms in orphans:
+    # Also find manuscripts with status=uploaded
+    uploaded = session.query(Manuscript).filter(Manuscript.status == "uploaded").all()
+    all_orphans = {ms.id: ms for ms in orphans + uploaded}.values()
+
+    for ms in all_orphans:
         deleted_ids.append(ms.id)
         if not dry_run:
+            # Delete data directories
             for d in (app_config.RAW_DATA_DIR / str(ms.id),
                       app_config.PROCESSED_DATA_DIR / str(ms.id)):
                 shutil.rmtree(d, ignore_errors=True)
@@ -59,10 +65,9 @@ def delete_orphan_manuscripts(session, dry_run: bool) -> list[int]:
     return deleted_ids
 
 
-def delete_existing_seeded_manuscripts(session, dry_run: bool) -> list[int]:
-    """Delete existing manuscripts that match SEED_IDS (by identifier) to avoid duplicates."""
+def delete_existing_seeded(session, dry_run: bool) -> list[int]:
+    """Delete existing manuscripts that match SEED_IDS to avoid duplicates."""
     deleted_ids = []
-    # Find ALL manuscripts whose identifier matches one of the SEED_IDS
     for mid in SEED_IDS:
         identifier = f"{mid}.png"
         manuscripts = session.query(Manuscript).filter(Manuscript.identifier == identifier).all()
@@ -73,10 +78,8 @@ def delete_existing_seeded_manuscripts(session, dry_run: bool) -> list[int]:
                           app_config.PROCESSED_DATA_DIR / str(ms.id)):
                     shutil.rmtree(d, ignore_errors=True)
                 session.delete(ms)
-
     if not dry_run:
         session.commit()
-
     return deleted_ids
 
 
@@ -141,21 +144,18 @@ def verify_manuscripts(session, seeded: list[tuple[int, str]], dry_run: bool) ->
 
         verified_text = ref_file.read_text(encoding="utf-8").strip()
 
+        # Find the transcription for this manuscript
+        tr = session.query(Transcription).filter(
+            Transcription.manuscript_id == ms_id
+        ).first()
+
+        if tr is None:
+            print(f"SKIP verification for {mid} (no transcription)")
+            continue
+
         if not dry_run:
-            # Find the transcription for this manuscript
-            tr = session.query(Transcription).filter(
-                Transcription.manuscript_id == ms_id
-            ).first()
-
-            if tr is None:
-                print(f"SKIP verification for {mid} (no transcription)")
-                continue
-
             repo.verify_transcription(session, tr.id, verified_text)
-            verified_count += 1
-        else:
-            # In dry-run, just verify the reference file exists
-            verified_count += 1
+        verified_count += 1
 
     if not dry_run:
         session.commit()
@@ -175,19 +175,19 @@ def main() -> None:
     init_db()
     session = SessionLocal()
     try:
-        # Step 1: Delete orphans (no transcription)
-        deleted_orphans = delete_orphan_manuscripts(session, args.dry_run)
-        print(f"Would delete {len(deleted_orphans)} orphan manuscripts: {deleted_orphans}")
+        # Step 1: Delete orphans
+        deleted_ids = delete_orphan_manuscripts(session, args.dry_run)
+        print(f"Would delete {len(deleted_ids)} orphan manuscripts: {deleted_ids}")
 
-        # Step 1b: Delete existing seeded manuscripts to avoid duplicates
-        deleted_seeded = delete_existing_seeded_manuscripts(session, args.dry_run)
+        # Step 2: Delete existing seeded manuscripts to avoid duplicates
+        deleted_seeded = delete_existing_seeded(session, args.dry_run)
         print(f"Would delete {len(deleted_seeded)} existing seeded manuscripts: {deleted_seeded}")
 
-        # Step 2: Seed manuscripts
+        # Step 3: Seed manuscripts
         seeded = seed_manuscripts(session, args.dry_run)
         print(f"Would seed {len(seeded)} manuscripts: {[mid for _, mid in seeded]}")
 
-        # Step 3: Verify 4 manuscripts
+        # Step 4: Verify 4 manuscripts
         verified_count = verify_manuscripts(session, seeded, args.dry_run)
         print(f"Would verify {verified_count} manuscripts (indices {VERIFY_INDICES})")
 
