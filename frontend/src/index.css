@@ -316,3 +316,46 @@ main.full { max-width: 1240px; margin: 0 auto; width: 100%; }
   font-family: var(--serif); font-size: 15px; padding: 6px 4px;
 }
 .toolbtn:hover { color: var(--gold); }
+
+/* ---- error boundary ---- */
+.error-boundary {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--paper);
+}
+.error-boundary-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 40px 32px;
+  max-width: 420px;
+  text-align: center;
+}
+.error-boundary-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin: 0 auto 16px;
+  border: 1px solid var(--border);
+}
+.error-boundary-card h2 {
+  font-family: var(--serif);
+  font-size: 24px;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+.error-boundary-message {
+  color: var(--muted);
+  margin: 0 0 24px;
+  font-size: 15px;
+  line-height: 1.5;
+}
