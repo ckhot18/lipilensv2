@@ -272,6 +272,19 @@ main.full { max-width: 1240px; margin: 0 auto; width: 100%; }
 .flink { cursor: pointer; }
 .flink:hover { color: var(--gold); }
 
+/* ---- health banner ---- */
+.health-banner {
+  background: var(--warn-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 28px;
+  text-align: center;
+}
+.health-banner-text {
+  color: var(--warn-fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 /* ---- before/after slider (react-compare-image) ---- */
 .compareslot {
   position: relative; border-radius: 10px; overflow: hidden;

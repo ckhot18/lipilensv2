@@ -3,6 +3,7 @@ import About from "./pages/About.jsx";
 import Home from "./pages/Home.jsx";
 import Library from "./pages/Library.jsx";
 import Transcribe from "./pages/Transcribe.jsx";
+import { health } from "./api/client";
 
 const TABS = [
   ["transcribe", "Transcribe"],
@@ -18,11 +19,16 @@ export default function App() {
   );
   const [globalQuery, setGlobalQuery] = useState("");
   const [searchBox, setSearchBox] = useState("");
+  const [healthStatus, setHealthStatus] = useState(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     localStorage.setItem("lipilens-theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => {
+    health().then((res) => setHealthStatus(res)).catch(() => {});
+  }, []);
 
   function go(next, query) {
     if (query !== undefined) setGlobalQuery(query);
@@ -72,6 +78,14 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {healthStatus && healthStatus.status !== "ok" && (
+        <div className="health-banner" role="status" aria-live="polite">
+          <span className="health-banner-text">
+            ⚠ {healthStatus.reason || "Backend unavailable"}
+          </span>
+        </div>
+      )}
 
       <div className="body">
         <main className="full">
