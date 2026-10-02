@@ -38,6 +38,11 @@ data/MODI_HChar/
 *.sqlite
 *.sqlite3
 
+# Local experiment scratch (regenerable by re-running the sweep)
+experiments/results/_replay_index.json
+# Colab working files
+.ipynb_checkpoints/
+
 # OS junk
 .DS_Store
 Thumbs.db

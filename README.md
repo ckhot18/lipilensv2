@@ -5,9 +5,9 @@ with an embedded empirical study on how image restoration affects
 vision-language transcription accuracy.
 
 ```
-photo ──► restore ──► transcribe ──► verify ──► archive ──► search
-           (OpenCV)   (Qwen2.5-VL-3B   (human,      (SQLite)
-                       + Modi LoRA)    explicit)
+photo -> restore -> segment -> transcribe -> verify -> archive -> search
+        (OpenCV)   (OpenCV)   (Qwen2.5-VL-3B  (human,       (SQLite)
+                                + Modi LoRA)    explicit)
 ```
 
 ## Problem
@@ -16,54 +16,75 @@ Modi was Maharashtra's administrative script from the 13th century until the
 mid-20th. Tens of millions of documents survive only in Modi; fluent readers
 are disappearing, pages are degrading, and no production OCR exists for the
 script. General VLMs with LoRA specialization can draft transliterations, but
-a fluent draft can be entirely wrong — so the draft must never be treated as
+a fluent draft can be entirely wrong - so the draft must never be treated as
 output.
+
+## Two findings
+
+**1. Restoration does not help, and binarization actively harms.** 50 real
+MoDeTrans pages (IIT Roorkee, MIT) with expert Devanagari references; 140 calls
+across 7 conditions. Sign test on win/tie/loss against the unmodified scan:
+
+| Condition | mean CER | delta | W/T/L | p | verdict |
+|---|---|---|---|---|---|
+| original | 0.317 | - | - | - | baseline |
+| grayscale | 0.317 | +0.0000 | 0/20/0 | 1.000 | perfect control |
+| denoised | 0.321 | +0.0041 | 8/1/11 | 0.648 | no effect |
+| enhanced | 0.328 | +0.0119 | 5/4/11 | 0.210 | no effect |
+| deskewed | 0.332 | +0.0151 | 3/9/8 | 0.227 | no effect |
+| **binarized** | **0.355** | **+0.0386** | **3/0/17** | **0.0026** | **HARMS** |
+| full_restoration | 0.359 | +0.0425 | 5/1/14 | 0.064 | borderline |
+
+Binarization survives Bonferroni correction (0.0026 x 6 = 0.0156). The
+practical takeaway: **default to `original`**; offer restoration as an option,
+never as the default.
+
+`grayscale` is a built-in control that ties 20/20 with means identical to four
+decimals - and it genuinely alters the image (100% of pixels change). A no-op
+that changes everything and changes nothing is what makes the rest credible.
+
+**2. The real bottleneck was visual token budget, not preprocessing.** A page
+arrives as 1268x463 = 587,084 px. With `max_pixels` at the old 512*28*28 the
+processor downsampled it to 1048x382, leaving **128 merged visual tokens for a
+page containing up to 262 characters - under 0.5 tokens per character.** Qwen
+merges 28x28 patches 2x2, so one token covers 14x14 px; the model was being
+shown glyphs smaller than its own feature extractor.
+
+That is why restoration could not help: no amount of resampling or local
+contrast adds information the input does not contain.
+
+The fix is `backend/services/transcription/segment.py`: split the page into
+text lines (horizontal ink projection, Otsu threshold), crop each to its ink
+extent, and upscale to fill the pixel budget. Each line then gets the whole
+budget instead of sharing it six ways.
+
+| | whole page | per line |
+|---|---|---|
+| visual tokens | 128 | ~320 per line |
+| tokens per character | **0.49** | **~7.3** |
+
+Measured on the real corpus: MT-038 (CER 0.912) splits into 4 lines for a 6.8x
+token gain; MT-003 (CER 0.567) into 6 lines for 9.7x. Segmentation is pure
+OpenCV and costs **no GPU**. Disable with `SEGMENT_LINES=0` to reproduce the
+old behaviour for comparison.
 
 ## Architecture
 
 | Layer | Implementation | Notes |
 |---|---|---|
-| Frontend | React + Vite (Transcribe / Library / About) | No business logic; talks HTTP only |
+| Frontend | React 19 + Vite | No business logic; talks HTTP only |
 | API | FastAPI, thin routes, OpenAPI at `/docs` | Sync handlers (threadpool); static `/files` serving |
 | Restoration | OpenCV, 7 named configs, stage-level modular | Pure functions; independently tested |
-| Inference | `transcribe(image, prompt)` interface | Local Qwen+LoRA or Colab GPU endpoint via `INFERENCE_MODE` |
+| Preview | `POST /api/manuscripts/preview` | Restoration only: no DB row, no model call, 61-545 ms |
+| Segmentation | OpenCV line detection + upscale | No GPU; wraps any inference backend |
+| Inference | `transcribe(image, prompt)` interface | Local Qwen+LoRA or Colab GPU via `INFERENCE_MODE` |
 | Persistence | SQLite via SQLAlchemy, repository pattern | `ai_transcription` immutable; verification writes a separate column |
 | Evaluation | Standalone CER/WER module | Operates on saved outputs, never live requests |
 
-## Restoration conditions
-
-Seven cumulative configs, from no-op control to full pipeline:
-
-![All seven preprocessing outputs for one page](docs/phase2_comparison_grid.png)
-
-`original` · `grayscale` · `denoised` (non-local-means) · `enhanced` (CLAHE) ·
-`binarized` (Otsu) · `deskewed` (Hough) · `full_restoration` (all stages)
-
-## Measured results
-
-50 real MoDeTrans pages (IIT Roorkee, MIT) with expert Devanagari references;
-Qwen2.5-VL-3B + Modi LoRA (pinned revisions), official prompt, greedy
-decoding. Baseline (original images): **mean CER 0.304, range 0.026–0.912.**
-140-call sweep over 7 conditions × 20 pages:
-
-![Mean CER/WER per condition](docs/sweep_means.png)
-
-| Condition | Mean CER | Pages worse than original |
-|---|---|---|
-| original | 0.317 | — |
-| grayscale | 0.317 | 0/20 (exact no-op control) |
-| denoised | 0.321 | 11/20 |
-| enhanced | 0.328 | 10/20 |
-| deskewed | 0.332 | 8/20 |
-| binarized | 0.355 | **17/20** |
-| full restoration | 0.359 | **14/20 (worst overall)** |
-
-Conclusion: on clean historical pages, send the original to the model.
-Binarization destroys faint-stroke detail the VLM uses; stacking neutral
-stages compounds into harm. Descriptive statistics (n=20); possible
-train-split overlap disclosed in the paper. Full per-sample data:
-`experiments/results/sweep_metrics.csv`. Formal write-up:
-`research/lipilens_paper.pdf`.
+The two-act split is deliberate: **restoration is CPU-only and instant, so it
+never waits on the GPU.** The UI previews any pipeline live and only the
+"Read with AI" action blocks on the model. If transcription fails, the restored
+image is already archived and safe.
 
 ## Quickstart
 
@@ -76,50 +97,101 @@ cd lipilensv2
 python -m venv .venv && .\.venv\Scripts\activate
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 pip install -r requirements.txt
+```
+
+### 1. Start the model in Colab
+
+Open **`colab/lipilens_colab_server.ipynb`** in Colab with a **T4 GPU** runtime
+and run the cells in order. It installs pinned dependencies, starts the API in
+a background thread, opens a tunnel (ngrok, or Colab's built-in one with no
+signup), and self-tests the round trip before you leave the browser.
+
+Do **not** run `!python lipilens_colab_server.py` - it blocks the cell and
+nothing after it can execute.
+
+### 2. Point the backend at it
+
+```bash
 cp .env.example .env        # set COLAB_ENDPOINT_URL + INFERENCE_MODE=colab
 ```
 
-Serve the model (one time, ~5 min): open `colab/lipilens_colab_server.py`
-in a Colab GPU notebook, run all cells, expose port 8000 via ngrok, paste the
-URL into `.env`. (Local-GPU path: `python scripts/download_model.py`, then
-`INFERENCE_MODE=local` — requires ~6 GB VRAM and a long first download.)
+### 3. Run the app
 
 ```bash
 python -m uvicorn backend.main:app --port 8000   # API + docs at /docs
 cd frontend && npm install && npm run dev        # UI at localhost:5173
 ```
 
-Verify the install: `python -m pytest tests/ -q` (50 tests), health at
-`GET /api/health` (probes Colab reachability in colab mode).
+Verify: `python -m pytest tests/ -q` (62 tests) and `GET /api/health`, which
+probes Colab reachability in colab mode. It must report `"status": "ok"` rather
+than `"degraded"`.
+
+Keep the Colab tab open. Closing it takes the model down and the app falls back
+to degraded.
+
+### Local GPU instead
+
+`python scripts/download_model.py`, then `INFERENCE_MODE=local` - needs ~6 GB
+VRAM and a long first download.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INFERENCE_MODE` | `colab` | `local` or `colab` |
+| `COLAB_ENDPOINT_URL` | - | Tunnel URL of the inference server |
+| `SEGMENT_LINES` | `1` | Transcribe line by line (the accuracy fix) |
+| `MAX_MODEL_PIXELS` | `1280*28*28` | Processor pixel budget; **must match** the Colab server |
 
 ## Repository layout
 
 ```
 backend/         FastAPI app, routes, schemas, services, database
 frontend/src/    React pages + single API client
-colab/           GPU inference server (runs in Colab, not locally)
+colab/           Inference server + ready-to-run Colab notebook
 experiments/     evaluation code, sweep scripts, results CSVs, figures
-scripts/         smoke tests, pipeline CLI, dataset fetch, report generators
-showcase/        50 demo images (git-tracked)
+scripts/         smoke tests, dataset prep, degradation + report generators
+showcase/        50 demo images
 research/        IEEE paper PDF + generator
 presentation/    slide deck + generator
 ```
 
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/run_sweep.py` | Resume-safe 7-condition sweep; per-call progress log |
+| `scripts/summarize_sweep.py` | Means, std, win/tie/loss per condition |
+| `scripts/make_realistic.py` | Simulates photographic capture (aged paper, uneven light, stains, skew, noise, JPEG) |
+| `scripts/make_degraded.py` | Older greyscale-only degradation set |
+| `scripts/fetch_modetrans.py` | Pull pages + expert ground truth from Hugging Face |
+| `scripts/refresh_library.py` | Prune orphans, reseed demos, seed verifications |
+
+`make_realistic.py` keeps the **authentic** script and ground truth and only
+simulates the capture. The output is a controlled degradation, not a real
+photograph, and should never be presented as one.
+
 ## Limitations
 
-Single-user, no auth — do not expose publicly. Inference runs synchronously
-(20–70 s per upload). Colab-dependent; sessions are ephemeral. Stats are
-descriptive; clean short pages only. See the paper §VII for the full list.
+- Single-user, no auth, no rate limiting - do not expose publicly.
+- Inference runs synchronously; with line segmentation a page costs N model
+  calls, so wall-clock per page rises even though total output tokens fall.
+- Colab sessions are ephemeral.
+- Descriptive statistics on clean, short pages; train-split overlap disclosed
+  in the paper.
+- The token-budget fix is implemented but the improved CER has not yet been
+  re-measured across the full sweep. Run it with `SEGMENT_LINES=1` before
+  quoting an accuracy figure.
 
 ## Credits
 
-- Dataset and expert transliterations: **MoDeTrans** — H. Kausadikar, T. Kale,
+- Dataset and expert transliterations: **MoDeTrans** - H. Kausadikar, T. Kale,
   O. Susladkar, S. Mittal, IIT Roorkee (MIT License), arXiv:2503.13060.
   https://huggingface.co/datasets/historyHulk/MoDeTrans
-- Transcription adapter: **lgtk/qwen25vl-3b-modi-synth-lora** — Sachin Godse
+- Transcription adapter: **lgtk/qwen25vl-3b-modi-synth-lora** - Sachin Godse
   (lgtk). https://huggingface.co/lgtk/qwen25vl-3b-modi-synth-lora
-- Base model: **Qwen2.5-VL-3B-Instruct** — Qwen Team (Apache-2.0).
+- Base model: **Qwen2.5-VL-3B-Instruct** - Qwen Team (Apache-2.0).
   https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct
 
 Pipeline, application, evaluation, and findings are this project's work; the
-model weights and dataset are their authors' — cited above.
+model weights and dataset are their authors' - cited above.
