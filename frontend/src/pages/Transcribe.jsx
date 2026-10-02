@@ -1,143 +1,215 @@
-import { useRef, useState } from "react";
-import ReactCompareImage from "react-compare-image";
+import { useCallback, useEffect, useRef, useState } from "react";
+import CompareSlider from "../components/CompareSlider.jsx";
+import Dropzone from "../components/Dropzone.jsx";
+import PipelineSelect from "../components/PipelineSelect.jsx";
+import StatCards from "../components/StatCards.jsx";
+import TextPanel from "../components/TextPanel.jsx";
 import {
-  PRESET_CONFIGS,
+  IconArrowRight,
+  IconDownload,
+  IconShieldCheck,
+} from "../components/Icons.jsx";
+import {
   imgUrl,
+  previewRestoration,
   transcribeManuscript,
   uploadManuscript,
   verifyTranscription,
 } from "../api/client";
 
-const MAX_BYTES = 20 * 1024 * 1024;
+const PROCESSING_FLOOR_MS = 1600;
 
-function CompareSlider({ original, restored, restoredLabel }) {
-  if (!original) {
-    return (
-      <div className="compare-empty">
-        The restored image will appear here after transcription.
-      </div>
-    );
-  }
-  if (!restored) {
-    return (
-      <div className="compareslot">
-        <img src={original} alt="Selected manuscript" />
-        <span className="tag left">Original</span>
-      </div>
-    );
-  }
-  return (
-    <div className="compareslot" data-testid="compare-slider">
-      <ReactCompareImage
-        leftImage={original}
-        rightImage={restored}
-        leftImageLabel="Original"
-        rightImageLabel={restoredLabel || "Restored"}
-        sliderLineColor="#ffffff"
-        handle={<button className="rc-handle" aria-label="Drag to compare">‹ ›</button>}
-      />
-    </div>
-  );
-}
-
-export default function Transcribe({ go }) {
-  const [file, setFile] = useState(null);
+export default function Transcribe({
+  autoFile,
+  onAutoFileConsumed,
+  onOpenLibrary,
+}) {
+  const [file, setFile] = useState(autoFile ?? null);
+  const [configName, setConfigName] = useState("enhanced");
   const [preview, setPreview] = useState(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [phase, setPhase] = useState("idle"); // idle|cleaning|reading|cleaned|done
+  const [previewing, setPreviewing] = useState(Boolean(autoFile));
+  const [previewMs, setPreviewMs] = useState(null);
+  const [phase, setPhase] = useState("idle");
   const [title, setTitle] = useState("");
   const [identifier, setIdentifier] = useState("");
-  const [configName, setConfigName] = useState("original");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [result, setResult] = useState(null);
   const [draft, setDraft] = useState("");
   const [verified, setVerified] = useState(false);
-  const fileInput = useRef(null);
+  const [readMs, setReadMs] = useState(null);
+  const [settled, setSettled] = useState(true);
 
-  function acceptFile(f) {
+  const busyRef = useRef(Boolean(autoFile));
+  const settleTimer = useRef(null);
+  const initialPipeline = useRef(configName);
+  const [dropKey, setDropKey] = useState(0);
+  const previewSeq = useRef(0);
+
+  useEffect(() => () => clearTimeout(settleTimer.current), []);
+
+  const runPreview = useCallback(
+    async (source, pipeline) => {
+      if (!source) return;
+      const seq = ++previewSeq.current;
+      setPreviewing(true);
+      try {
+        const res = await previewRestoration(source, pipeline);
+        if (seq !== previewSeq.current) return;
+        setPreview({
+          original: imgUrl(res.original_url),
+          restored: imgUrl(res.restored_url),
+          config: res.config_name,
+        });
+        setPreviewMs(res.elapsed_ms);
+        setError("");
+      } catch (err) {
+        if (seq !== previewSeq.current) return;
+        setError(`Restoration preview failed: ${err.message}`);
+        setPreview(null);
+      } finally {
+        if (seq === previewSeq.current) setPreviewing(false);
+      }
+    },
+    []
+  );
+
+  const reset = useCallback(() => {
+    clearTimeout(settleTimer.current);
+    previewSeq.current += 1;
+    busyRef.current = false;
+    setDropKey((n) => n + 1);
+    setFile(null);
+    setPreview(null);
+    setPreviewing(false);
+    setPreviewMs(null);
+    setResult(null);
+    setDraft("");
+    setVerified(false);
+    setPhase("idle");
     setError("");
     setNotice("");
+    setReadMs(null);
+    setSettled(true);
+    setTitle("");
+    setIdentifier("");
+  }, []);
+
+  const beginRun = useCallback(() => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setPhase("cleaning");
     setResult(null);
     setVerified(false);
-    if (preview) {
-      URL.revokeObjectURL(preview);
-      setPreview(null);
-    }
-    if (!f) {
-      setFile(null);
-      setPreview(null);
+    setSettled(false);
+    setReadMs(null);
+  }, []);
+
+  const read = useCallback(
+    async (source, pipeline) => {
+      if (!source || busyRef.current) return;
+      busyRef.current = true;
+      const started = performance.now();
+
+      let ms;
+      try {
+        ms = await uploadManuscript(source, {
+          title,
+          identifier,
+          configName: pipeline,
+          transcribe: false,
+        });
+        setResult(ms);
+        if (ms.duplicate) {
+          setNotice(
+            "Identical image and pipeline already archived — showing the existing record."
+          );
+        }
+      } catch (err) {
+        setError(err.message);
+        setPhase("failed");
+        setBusy(false);
+        busyRef.current = false;
+        setSettled(true);
+        return;
+      }
+
+      settleTimer.current = setTimeout(() => setSettled(true), PROCESSING_FLOOR_MS);
+
+      if (ms.transcription) {
+        setDraft(
+          ms.transcription.verified_transcription ||
+            ms.transcription.ai_transcription ||
+            ""
+        );
+        setReadMs(performance.now() - started);
+        setBusy(false);
+        busyRef.current = false;
+        setPhase("done");
+        return;
+      }
+
+      setPhase("reading");
+      try {
+        const full = await transcribeManuscript(ms.id);
+        setResult(full);
+        setDraft(
+          full.transcription?.verified_transcription ||
+            full.transcription?.ai_transcription ||
+            ""
+        );
+        setReadMs(performance.now() - started);
+        setPhase("done");
+      } catch (err) {
+        setError(`${err.message} — the cleaned image is safe in your library.`);
+        setPhase("cleaned");
+      } finally {
+        setBusy(false);
+        busyRef.current = false;
+      }
+    },
+    [identifier, title]
+  );
+
+  useEffect(() => {
+    if (!autoFile) return;
+    onAutoFileConsumed();
+    const kick = setTimeout(() => runPreview(autoFile, initialPipeline.current), 0);
+    return () => clearTimeout(kick);
+  }, [autoFile, runPreview, onAutoFileConsumed]);
+
+  function chooseFile(next) {
+    if (!next) {
+      reset();
       return;
     }
-    if (!f.type.startsWith("image/")) {
-      setError("Please choose an image file.");
-      return;
-    }
-    if (f.size > MAX_BYTES) {
-      setError("File exceeds the 20 MB limit.");
-      return;
-    }
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    reset();
+    setDropKey((n) => n + 1);
+    setFile(next);
+    setPreviewing(true);
+    runPreview(next, configName);
   }
 
-  async function onSubmit(e) {
-    e.preventDefault();
-    if (!file || busy) return;
-    // Act 1 — clean it (fast, local): upload with transcribe=false so the
-    // restored image + slider appear in ~1s, archived immediately.
-    setBusy(true);
-    setPhase("cleaning");
-    setError("");
-    setNotice("");
-    setResult(null);
-    setVerified(false);
-    let ms;
-    try {
-      ms = await uploadManuscript(file, { title, identifier, configName, transcribe: false });
-      setResult(ms);
-      if (ms.duplicate) {
-        setNotice("Identical image + pipeline already archived — showing the existing record.");
-      }
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-      setPhase("idle");
-      return;
-    }
-    // Act 2 — read it (slow, GPU): only if no transcription exists yet.
-    if (ms.transcription) {
-      setDraft(ms.transcription.ai_transcription || "");
-      setBusy(false);
-      setPhase("done");
-      return;
-    }
-    setPhase("reading");
-    try {
-      const full = await transcribeManuscript(ms.id);
-      setResult(full);
-      setDraft(full.transcription?.ai_transcription || "");
-      setPhase("done");
-    } catch (err) {
-      setError(err.message + " — the cleaned image is safe in your library.");
-      setPhase("cleaned");
-    } finally {
-      setBusy(false);
-    }
+  function onPipelineChange(next) {
+    setConfigName(next);
+    if (file) runPreview(file, next);
   }
 
   async function onVerify() {
-    if (!result?.transcription || busy) return;
-    if (!draft.trim()) {
+    if (!result?.transcription || busyRef.current) return;
+    const text = draft.trim();
+    if (!text) {
       setError("Verified text must not be empty.");
       return;
     }
     setBusy(true);
     setError("");
     try {
-      await verifyTranscription(result.transcription.id, draft.trim());
+      await verifyTranscription(result.transcription.id, text);
       setVerified(true);
+      setNotice("Verification saved. The original AI draft is preserved.");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -145,147 +217,229 @@ export default function Transcribe({ go }) {
     }
   }
 
-  async function onCopy() {
-    try {
-      await navigator.clipboard.writeText(draft);
-      setNotice("Copied to clipboard.");
-    } catch {
-      setError("Copy failed in this browser — select the text manually.");
-    }
-  }
-
   function onDownload() {
     const blob = new Blob([draft], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `lipilens-${result?.id || "transcription"}.txt`;
+    a.href = url;
+    a.download = `lipilens-${result?.id ?? "transcription"}.txt`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    URL.revokeObjectURL(url);
   }
 
   const tr = result?.transcription;
-  const isVerified = verified || result?.status === "verified";
+  const isVerified = verified || Boolean(tr?.verified_transcription);
+  const reading = phase === "reading";
+  const archived = Boolean(result);
+  const originalUrl = archived ? imgUrl(result.original_image_url) : preview?.original;
+  const restoredUrl = archived ? imgUrl(result.restored_image_url) : preview?.restored;
 
   return (
-    <section className="page">
-      <h2>Transcribe Modi Script</h2>
-      <p className="subtitle">
-        Upload an image of a Modi document and get the transcribed text using AI.
-      </p>
-
-      <div className="grid2">
-        <div className="card">
-          <div
-            className={dragOver ? "dropzone over" : "dropzone"}
-            onClick={() => fileInput.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setDragOver(false); acceptFile(e.dataTransfer.files?.[0]); }}
-          >
-            <div className="bigicon">🖼</div>
-            {preview ? (
-              <img src={preview} alt="Selected manuscript preview" className="preview" />
-            ) : (
-              <>
-                <p>Drag &amp; drop an image here<br />or</p>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); fileInput.current?.click(); }}
-                >
-                  Choose File
-                </button>
-              </>
-            )}
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => acceptFile(e.target.files?.[0])}
-            />
-          </div>
-          <p className="muted small" style={{ textAlign: "center" }}>
-            Supports: JPG, PNG, WebP, BMP, TIFF &nbsp;|&nbsp; Max size: 20 MB
+    <>
+      <div className="analysis-head">
+        <div>
+          <h1 className="h1">Document Analysis</h1>
+          <p className="lede" style={{ marginTop: 6 }}>
+            {archived
+              ? "Your scan is archived and restored. Transcription runs on the GPU."
+              : "Restoration is instant and CPU-only. Switch pipelines and watch the scan change."}
           </p>
-          <form onSubmit={onSubmit} className="form">
-            <label>
-              Title (optional)
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Peshwa-era letter" />
-            </label>
-            <label>
-              Identifier (optional)
-              <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="e.g. ACC-42" />
-            </label>
-            <label>
-              Restoration pipeline
-              <select value={configName} onChange={(e) => setConfigName(e.target.value)}>
-                {PRESET_CONFIGS.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" disabled={!file || busy}>
-              {busy ? "Working…" : "Restore & Transcribe"}
-            </button>
+        </div>
+        {archived && onOpenLibrary && (
+          <button type="button" className="btn ghost sm" onClick={onOpenLibrary}>
+            Open in Library
+          </button>
+        )}
+      </div>
+
+      <StatCards
+        pipeline={archived || preview ? configName : null}
+        model={tr?.model_name}
+        mode={tr?.inference_mode}
+        lines={tr?.line_count ?? null}
+        restoreMs={previewMs}
+        readMs={readMs}
+      />
+
+      <div className="analysis">
+        <div>
+          {originalUrl ? (
+            <CompareSlider
+              original={originalUrl}
+              restored={restoredUrl}
+              rightLabel={archived ? configName : `${configName} preview`}
+              processing={previewing || (!settled && archived)}
+            />
+          ) : (
+            <Dropzone key={dropKey} initialFile={file} onFile={chooseFile} />
+          )}
+
+          <form
+            className="form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              beginRun();
+              read(file, configName);
+            }}
+          >
+            <PipelineSelect
+              value={configName}
+              onChange={onPipelineChange}
+              disabled={busy}
+            />
+            <div className="grid2-fields">
+              <label className="field">
+                Title (optional)
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Peshwa-era letter"
+                />
+              </label>
+              <label className="field">
+                Identifier (optional)
+                <input
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="e.g. ACC-42"
+                />
+              </label>
+            </div>
+            <div className="btnrow">
+              <button type="submit" className="btn" disabled={!file || busy}>
+                {busy
+                  ? "Working…"
+                  : archived
+                    ? "Re-read with AI"
+                    : "Read with AI"}
+                {!busy && (
+                  <IconArrowRight style={{ width: 14, height: 14, marginLeft: 6 }} />
+                )}
+              </button>
+              {file && (
+                <button type="button" className="btn ghost" onClick={reset} disabled={busy}>
+                  Process another
+                </button>
+              )}
+            </div>
+            <p className="xs muted" style={{ margin: 0 }}>
+              Restoration above needs no GPU. Only this button waits on the model
+              (20–70 s per line group on Colab).
+            </p>
           </form>
         </div>
 
-        <div className="card">
-          <CompareSlider
-            original={result ? imgUrl(result.original_image_url) : preview}
-            restored={result ? imgUrl(result.restored_image_url) : null}
-            restoredLabel={configName}
-          />
-          <p className="muted small" style={{ textAlign: "center" }}>
-            Drag the handle to compare original vs restored. The original is always preserved.
-          </p>
+        <div className="analysis-side">
+          {reading ? (
+            <section className="card">
+              <div className="textcard-head">
+                <h3>Digitized Text</h3>
+              </div>
+              <div className="reading">
+                <span className="spinner" />
+                <p className="reading-text">
+                  Reading the manuscript line by line.
+                  <span className="muted">
+                    {" "}
+                    Each line is upscaled so the model can resolve the characters —
+                    this is the slow part.
+                  </span>
+                </p>
+              </div>
+              <div className="skeleton-lines">
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            </section>
+          ) : (
+            <TextPanel
+              title="Digitized Text"
+              value={tr?.ai_transcription}
+              badge={
+                isVerified ? (
+                  <span className="badge ok" style={{ marginLeft: 8 }}>
+                    <IconShieldCheck style={{ width: 11, height: 11 }} />
+                    Verified
+                  </span>
+                ) : tr ? (
+                  <span className="badge warn" style={{ marginLeft: 8 }}>
+                    AI draft
+                  </span>
+                ) : null
+              }
+            />
+          )}
+
+          {tr?.translation && (
+            <TextPanel title="Translation (English)" value={tr.translation} latin />
+          )}
         </div>
       </div>
 
-      {phase === "cleaning" && (
-        <p className="muted" role="status">Cleaning the image… (about a second)</p>
+      {tr && (
+        <section className="card" style={{ marginTop: 16 }}>
+          <div className="textcard-head">
+            <h3>Human verification</h3>
+            <button
+              type="button"
+              className="toolbtn"
+              onClick={onDownload}
+              aria-label="Download as text file"
+            >
+              <IconDownload style={{ width: 13, height: 13 }} />
+              Download (.txt)
+            </button>
+          </div>
+
+          <p className="xs muted" style={{ margin: "0 0 8px" }}>
+            Edit below and verify. The AI draft above is never altered.
+          </p>
+
+          <textarea
+            className="textarea"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={6}
+            aria-label="Verified transcription"
+            disabled={isVerified}
+          />
+
+          <div className="btnrow" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={onVerify}
+              disabled={busy || isVerified}
+            >
+              <IconShieldCheck style={{ width: 14, height: 14, marginRight: 6 }} />
+              {isVerified ? "Verified" : "Mark as Verified"}
+            </button>
+            <span className="badge accent">
+              {tr.model_name}
+              {tr.inference_mode ? ` · ${tr.inference_mode}` : ""}
+            </span>
+          </div>
+        </section>
       )}
-      {phase === "reading" && (
-        <p className="muted" role="status">
-          Cleaned in a flash ✓ — archived. Now the AI is reading… 20–70 seconds on the Colab GPU.
+
+      {phase === "cleaning" && (
+        <p className="notice info" role="status" aria-live="polite">
+          <span className="spinner" />
+          Archiving the scan and its restored version — about a second.
         </p>
       )}
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="ok-text">{notice}</p>}
-
-      {result && (
-        <div className="card">
-          <p className="ok-text">
-            Saved to your library as #{result.id}{" "}
-            {go && (
-              <button className="toolbtn" onClick={() => go("library")}>
-                Open in Library →
-              </button>
-            )}
-          </p>
-          <div className="panelhead">
-            <h3>
-              Transcribed Text{" "}
-              <span className={isVerified ? "badge ok" : "badge warn"}>
-                {isVerified ? "Verified" : "AI draft — pending review"}
-              </span>
-            </h3>
-            <div className="actions">
-              <button className="toolbtn" onClick={onCopy} title="Copy text">⧉ Copy</button>
-              <button className="toolbtn" onClick={onDownload} title="Download as .txt">⬇ Download (.txt)</button>
-            </div>
-          </div>
-          <p className="transcript">{tr?.ai_transcription || "—"}</p>
-          <label>
-            <span className="small muted">Edit below, then verify — the AI draft above is never altered.</span>
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={5} />
-          </label>
-          <p className="muted small">Model: {tr?.model_name} · via {tr?.inference_mode}</p>
-          <button onClick={onVerify} disabled={busy || isVerified}>
-            Mark as Verified
-          </button>
-        </div>
+      {notice && (
+        <p className="notice ok" role="status">
+          {notice}
+        </p>
       )}
-    </section>
+      {error && (
+        <p className="notice err" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
