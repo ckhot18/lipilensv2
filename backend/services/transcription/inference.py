@@ -1,6 +1,10 @@
 import abc
+import logging
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -10,6 +14,7 @@ class TranscriptionResult:
     model_name: str
     inference_mode: str
     raw_output: str = ""
+    line_count: int = 0
 
 
 class TranscriptionService(abc.ABC):
@@ -44,13 +49,79 @@ def get_transcription_service() -> TranscriptionService:
         from backend.services.transcription.local_qwen import (
             LocalQwenTranscriptionService,
         )
-        return LocalQwenTranscriptionService()
-    if mode == "colab":
+        service: TranscriptionService = LocalQwenTranscriptionService()
+    elif mode == "colab":
         from backend.services.transcription.colab_client import (
             ColabTranscriptionService,
         )
-        return ColabTranscriptionService()
-    raise ValueError(
-        f"Unknown INFERENCE_MODE={app_config.INFERENCE_MODE!r} "
-        "(expected 'local' or 'colab')"
-    )
+        service = ColabTranscriptionService()
+    else:
+        raise ValueError(
+            f"Unknown INFERENCE_MODE={app_config.INFERENCE_MODE!r} "
+            "(expected 'local' or 'colab')"
+        )
+    if app_config.SEGMENT_LINES:
+        return LineSegmentedTranscriptionService(service)
+    return service
+
+
+class LineSegmentedTranscriptionService(TranscriptionService):
+    """Split a page into text lines and transcribe each one separately.
+
+    A whole page reaches the model as ~128 merged visual tokens for a few
+    hundred characters — under one token per character. Transcribing a single
+    upscaled line instead spends the whole pixel budget on ~40 characters,
+    multiplying the tokens available per character several-fold. Segmentation
+    is pure OpenCV, so this costs no GPU.
+    """
+
+    def __init__(self, inner: TranscriptionService):
+        self.inner = inner
+
+    def transcribe(self, image_path: str | Path, prompt: str) -> TranscriptionResult:
+        from backend.services.transcription.segment import segment_lines, write_lines
+
+        lines = segment_lines(image_path)
+        if len(lines) <= 1:
+            result = self.inner.transcribe(image_path, prompt)
+            result.line_count = len(lines)
+            return result
+
+        logger.info("Line-segmented transcription: %d lines", len(lines))
+        pieces: list[str] = []
+        model_name = ""
+        inference_mode = ""
+        raw: list[str] = []
+
+        with tempfile.TemporaryDirectory(prefix="lipilens_lines_") as tmp:
+            paths = write_lines(lines, Path(tmp))
+            for i, path in enumerate(paths, start=1):
+                try:
+                    part = self.inner.transcribe(path, prompt)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Line %d/%d failed (%s); skipping",
+                                   i, len(paths), type(exc).__name__)
+                    continue
+                text = (part.text or "").strip()
+                if text:
+                    pieces.append(text)
+                    raw.append(text)
+                model_name = model_name or part.model_name
+                inference_mode = inference_mode or part.inference_mode
+
+        if not pieces:
+            # Every line failed; fall back to one whole-page call rather than
+            # reporting an empty transcription as success.
+            logger.warning("All %d lines failed; retrying as a single page",
+                           len(lines))
+            result = self.inner.transcribe(image_path, prompt)
+            result.line_count = 1
+            return result
+
+        return TranscriptionResult(
+            text="\n".join(pieces),
+            model_name=f"{model_name} + line segmentation",
+            inference_mode=inference_mode,
+            raw_output="\n".join(raw),
+            line_count=len(paths),
+        )

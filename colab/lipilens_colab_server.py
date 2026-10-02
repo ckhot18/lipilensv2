@@ -1,24 +1,41 @@
 #!/usr/bin/env python
-"""LipiLens Colab inference server (Phase 3 fallback, PROJECT_GUIDE.md Sec. 15).
+"""LipiLens Colab inference server.
 
-Run this INSIDE a Google Colab notebook with a GPU runtime
-(Runtime -> Change runtime type -> T4/A100 GPU):
+Easiest path: open ``lipilens_colab_server.ipynb`` in Colab with a GPU runtime
+and run the cells in order. It starts this app in a background thread (a bare
+``!python lipilens_colab_server.py`` blocks the cell, so nothing after it can
+run), opens a tunnel, and self-tests the round trip.
 
-    !pip install -q transformers peft bitsandbytes accelerate pillow fastapi uvicorn pyngrok
-    !python lipilens_colab_server.py   # then expose port 8000 via ngrok
+Manual equivalent, if you prefer plain cells:
+
+    !pip install -q "transformers==5.17.0" "peft==0.21.0" "bitsandbytes==0.50.2" \\
+                  "accelerate==1.15.0" pillow fastapi uvicorn pyngrok
+
+    # import without self-starting, then serve in a thread
+    import threading, uvicorn, importlib.util, sys
+    spec = importlib.util.spec_from_file_location("lipilens_colab_server",
+                                                 "lipilens_colab_server.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["lipilens_colab_server"] = mod
+    spec.loader.exec_module(mod)
+    threading.Thread(target=lambda: uvicorn.run(mod.app, host="0.0.0.0", port=8000),
+                     daemon=True).start()
 
     from pyngrok import ngrok
     ngrok.set_auth_token("YOUR_NGROK_TOKEN")
-    print(ngrok.connect(8000))
+    print(ngrok.connect(8000).public_url)   # -> COLAB_ENDPOINT_URL in your .env
 
-Copy the printed https URL into the local .env as COLAB_ENDPOINT_URL and set
-INFERENCE_MODE=colab. The local backend's ColabTranscriptionService will then
-POST {image (base64), prompt} here and receive {transcription}.
+Set ``INFERENCE_MODE=colab`` and ``COLAB_ENDPOINT_URL=<printed url>`` in the
+local .env. Keep the notebook open; closing it takes the server down.
 
 Contract (must stay in sync with backend/services/transcription/colab_client.py):
     POST /transcribe  {"image": "<base64 png/jpg>", "prompt": "<str>"}
     -> 200 {"transcription": "<Devanagari str>"}
     GET  /health -> {"status": "ok", "model_loaded": bool}
+    GET  /gpu    -> hardware/version facts for the research log
+
+Note: the backend sends ONE REQUEST PER TEXT LINE (line segmentation is applied
+on its side, so this process never needs to know about pages).
 """
 
 import base64
@@ -67,7 +84,9 @@ def load_model_once():
         MODEL_ID, quantization_config=bnb, device_map="auto")
     _model = PeftModel.from_pretrained(base, ADAPTER_ID)
     _model.eval()
-    _processor = AutoProcessor.from_pretrained(MODEL_ID, max_pixels=512 * 28 * 28)
+    # Must match backend MAX_MODEL_PIXELS: the API already upscaled each text
+    # line to fill this budget, and a lower cap here would undo that.
+    _processor = AutoProcessor.from_pretrained(MODEL_ID, max_pixels=1280 * 28 * 28)
     logger.info("Model ready on %s", _model.device)
 
 

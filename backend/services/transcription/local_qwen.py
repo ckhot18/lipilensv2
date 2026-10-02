@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 from PIL import Image
 
-from backend.config import BASE_MODEL_NAME, LORA_ADAPTER_NAME
+from backend.config import BASE_MODEL_NAME, LORA_ADAPTER_NAME, MAX_MODEL_PIXELS
 from backend.services.transcription.inference import TranscriptionResult, TranscriptionService
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class LocalQwenTranscriptionService(TranscriptionService):
             _model = PeftModel.from_pretrained(base_model, LORA_ADAPTER_NAME)
             _model.eval()
             
-            _processor = AutoProcessor.from_pretrained(BASE_MODEL_NAME, max_pixels=512 * 28 * 28)
+            _processor = AutoProcessor.from_pretrained(BASE_MODEL_NAME, max_pixels=MAX_MODEL_PIXELS)
             
             logger.info("Local model loaded successfully.")
             

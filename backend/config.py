@@ -35,6 +35,17 @@ BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "Qwen/Qwen2.5-VL-3B-Instruct")
 LORA_ADAPTER_NAME = os.getenv("LORA_ADAPTER_NAME", "lgtk/qwen25vl-3b-modi-synth-lora")
 COLAB_ENDPOINT_URL = os.getenv("COLAB_ENDPOINT_URL", "")
 
+# Transcribe one text line at a time instead of a whole page. Costs no GPU
+# (segmentation is OpenCV) and multiplies visual tokens per character.
+SEGMENT_LINES = os.getenv("SEGMENT_LINES", "1").strip().lower() not in (
+    "0", "false", "no", "off"
+)
+# Pixel budget handed to the Qwen2.5-VL processor. 512*28*28 starves a full
+# page (~0.5 visual tokens per character); 1280*28*28 is within the model's
+# documented range for document OCR. Must match the value the Colab server
+# uses, or it will silently re-downscale the upscaled line crops.
+MAX_MODEL_PIXELS = int(os.getenv("MAX_MODEL_PIXELS", 1280 * 28 * 28))
+
 # Pinned revisions (verified via HF API 2026-09-17). Part of the transcription
 # cache key: a server-side model update must never serve stale cached text.
 BASE_MODEL_REVISION = os.getenv(

@@ -79,7 +79,8 @@ def test_dispatcher_selects_colab(monkeypatch):
 
     monkeypatch.setattr(app_config, "INFERENCE_MODE", "colab")
     svc = get_transcription_service()
-    assert isinstance(svc, colab_client.ColabTranscriptionService)
+    inner = getattr(svc, "inner", svc)
+    assert isinstance(inner, colab_client.ColabTranscriptionService)
 
 
 def test_dispatcher_selects_local(monkeypatch):
@@ -90,7 +91,26 @@ def test_dispatcher_selects_local(monkeypatch):
 
     monkeypatch.setattr(app_config, "INFERENCE_MODE", "local")
     svc = get_transcription_service()
-    assert isinstance(svc, LocalQwenTranscriptionService)
+    inner = getattr(svc, "inner", svc)
+    assert isinstance(inner, LocalQwenTranscriptionService)
+
+
+def test_dispatcher_wraps_for_line_segmentation(monkeypatch):
+    import backend.config as app_config
+    from backend.services.transcription.inference import (
+        LineSegmentedTranscriptionService,
+    )
+
+    monkeypatch.setattr(app_config, "INFERENCE_MODE", "colab")
+    monkeypatch.setattr(app_config, "SEGMENT_LINES", True)
+    assert isinstance(
+        get_transcription_service(), LineSegmentedTranscriptionService
+    )
+
+    monkeypatch.setattr(app_config, "SEGMENT_LINES", False)
+    assert not isinstance(
+        get_transcription_service(), LineSegmentedTranscriptionService
+    )
 
 
 def test_dispatcher_rejects_unknown_mode(monkeypatch):
