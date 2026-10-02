@@ -17,7 +17,7 @@ from backend.api import manuscripts as manuscripts_route
 from backend.database.models import Base
 from backend.database.session import get_db, make_engine
 from backend.main import app
-from backend.services.pipeline import PipelineOutput
+from backend.services.pipeline import PipelineOutput, TranscribeOutput
 from backend.services.restoration.pipeline import PRESET_CONFIGS
 
 

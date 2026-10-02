@@ -130,31 +130,56 @@ def _cache_path(cache_dir: Path, key: str) -> Path:
     return cache_dir / f"tcache_{key}.json"
 
 
-def run_full_pipeline(
-    image_path: str | Path,
-    config_name: str = "full_restoration",
-    output_dir: str | Path | None = None,
-    prompt: str = DEFAULT_PROMPT,
-    cache_dir: str | Path | None = None,
-) -> PipelineOutput:
-    """Run restoration then transcription on one image.
+@dataclass
+class RestoreOutput:
+    """Result of the restoration step alone (fast, local, CPU-only)."""
 
-    The model ALWAYS receives the restored image file (never the original
-    object in memory) — passing the wrong variant is the classic Phase-4 bug.
-    """
+    config_name: str
+    config_dict: dict[str, Any]
+    source_image: str
+    image_sha256: str
+    restored_image_path: str
+    restore_seconds: float
+    restoration_warning: str | None = None
+
+
+@dataclass
+class TranscribeOutput:
+    """Result of the transcription step alone (slow, model call)."""
+
+    transcription: str
+    model_name: str
+    inference_mode: str
+    transcribe_seconds: float
+    cache_hit: bool = False
+
+
+def _get_config(config_name: str):
     if config_name not in PRESET_CONFIGS:
         raise ValueError(
             f"Unknown config '{config_name}'. Available: {list(PRESET_CONFIGS)}"
         )
-    image_path = Path(image_path)
-    config = PRESET_CONFIGS[config_name]
+    return PRESET_CONFIGS[config_name]
+
+
+def restore_only(
+    image_path: str | Path,
+    config_name: str = "full_restoration",
+    output_dir: str | Path | None = None,
+) -> RestoreOutput:
+    """Run restoration only: image file in, restored image file out.
+
+    Never calls the model. Graceful fallback per Sec. 23: a stage failure
+    falls back to the original image with a warning instead of raising.
+    """
+    config = _get_config(config_name)
     config_dict = config.to_dict()
+    image_path = Path(image_path)
 
     raw_bytes = image_path.read_bytes()
     image_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     source = load_image(image_path)
 
-    # --- restoration (graceful fallback per Sec. 23) ----------------------
     t0 = time.perf_counter()
     warning = None
     try:
@@ -167,18 +192,38 @@ def run_full_pipeline(
         restored = source
     restore_seconds = time.perf_counter() - t0
 
-    # --- persist restored image to disk (model consumes a FILE) -----------
     # Default scratch lives under data/outputs (NOT served by /files).
     out_dir = (Path(output_dir) if output_dir
                else Path("data/outputs/_pipeline"))
     restored_path = save_image(
         restored, out_dir / f"{image_path.stem}_{config_name}.png"
     )
+    return RestoreOutput(
+        config_name=config_name,
+        config_dict=config_dict,
+        source_image=str(image_path),
+        image_sha256=image_sha256,
+        restored_image_path=str(restored_path),
+        restore_seconds=round(restore_seconds, 2),
+        restoration_warning=warning,
+    )
 
-    # --- transcription on the RESTORED file (cached when asked) -----------
+
+def transcribe_only(
+    restored_image_path: str | Path,
+    image_bytes: bytes,
+    config_dict: dict[str, Any],
+    prompt: str = DEFAULT_PROMPT,
+    cache_dir: str | Path | None = None,
+) -> TranscribeOutput:
+    """Run transcription on an already-restored image file.
+
+    `image_bytes` must be the ORIGINAL upload bytes (plus config_dict and
+    prompt they form the deterministic cache key).
+    """
     mode = _current_mode_label()
     cache_hit = False
-    key = _cache_key(raw_bytes, config_dict, prompt, mode)
+    key = _cache_key(image_bytes, config_dict, prompt, mode)
     cached_text = cached_model = None
     if cache_dir is not None:
         cpath = _cache_path(Path(cache_dir), key)
@@ -198,7 +243,7 @@ def run_full_pipeline(
         logger.info("Transcription cache HIT (%s) — model call skipped", key)
     else:
         service = _get_service()
-        tresult = service.transcribe(restored_path, prompt)
+        tresult = service.transcribe(Path(restored_image_path), prompt)
         text, model_name = tresult.text, tresult.model_name
         inference_mode = tresult.inference_mode
         if cache_dir is not None:
@@ -208,24 +253,49 @@ def run_full_pipeline(
                 {"text": text, "model_name": model_name},
                 ensure_ascii=False), encoding="utf-8")
     transcribe_seconds = time.perf_counter() - t1
-
-    logger.info("Pipeline '%s' done: restore=%.2fs transcribe=%.2fs mode=%s%s",
-                config_name, restore_seconds, transcribe_seconds,
-                inference_mode, " (cache hit)" if cache_hit else "")
-    return PipelineOutput(
-        config_name=config_name,
-        config_dict=config_dict,
-        source_image=str(image_path),
-        image_sha256=image_sha256,
-        restored_image_path=str(restored_path),
+    return TranscribeOutput(
         transcription=text,
         model_name=model_name,
         inference_mode=inference_mode,
-        prompt=prompt,
-        restore_seconds=round(restore_seconds, 2),
         transcribe_seconds=round(transcribe_seconds, 1),
-        restoration_warning=warning,
         cache_hit=cache_hit,
+    )
+
+
+def run_full_pipeline(
+    image_path: str | Path,
+    config_name: str = "full_restoration",
+    output_dir: str | Path | None = None,
+    prompt: str = DEFAULT_PROMPT,
+    cache_dir: str | Path | None = None,
+) -> PipelineOutput:
+    """Run restoration then transcription on one image.
+
+    The model ALWAYS receives the restored image file (never the original
+    object in memory) — passing the wrong variant is the classic Phase-4 bug.
+    """
+    image_path = Path(image_path)
+    r = restore_only(image_path, config_name, output_dir)
+    t = transcribe_only(r.restored_image_path,
+                        image_path.read_bytes(), r.config_dict,
+                        prompt, cache_dir)
+    logger.info("Pipeline '%s' done: restore=%.2fs transcribe=%.2fs mode=%s%s",
+                config_name, r.restore_seconds, t.transcribe_seconds,
+                t.inference_mode, " (cache hit)" if t.cache_hit else "")
+    return PipelineOutput(
+        config_name=config_name,
+        config_dict=r.config_dict,
+        source_image=str(image_path),
+        image_sha256=r.image_sha256,
+        restored_image_path=r.restored_image_path,
+        transcription=t.transcription,
+        model_name=t.model_name,
+        inference_mode=t.inference_mode,
+        prompt=prompt,
+        restore_seconds=r.restore_seconds,
+        transcribe_seconds=t.transcribe_seconds,
+        restoration_warning=r.restoration_warning,
+        cache_hit=t.cache_hit,
     )
 
 
