@@ -54,3 +54,15 @@ class ManuscriptDetail(BaseModel):
 
 class VerifyRequest(BaseModel):
     verified_transcription: str = Field(min_length=1, max_length=5000)
+
+
+class RestorationPreview(BaseModel):
+    """Result of a restoration-only preview: no DB row, no model call."""
+
+    config_name: str
+    original_url: str | None = None
+    restored_url: str | None = None
+    elapsed_ms: int = 0
+    cached: bool = False
+    # True when the stages ran in cumulative order up to config_name.
+    stages: list[str] = Field(default_factory=list)

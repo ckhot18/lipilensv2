@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import CORS_ORIGINS, PROCESSED_DATA_DIR, RAW_DATA_DIR
-from backend.api import health, manuscripts, transcriptions
+from backend.api import health, manuscripts, preview, transcriptions
 from backend.database.session import init_db
 
 
@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api")
 app.include_router(manuscripts.router, prefix="/api")
 app.include_router(transcriptions.router, prefix="/api")
+app.include_router(preview.router, prefix="/api")
 
 # Serve manuscript images (originals + restored) for the frontend.
 app.mount("/files/raw", StaticFiles(directory=RAW_DATA_DIR), name="raw")

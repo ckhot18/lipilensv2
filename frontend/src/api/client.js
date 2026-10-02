@@ -68,6 +68,17 @@ export function health() {
   return request("/api/health");
 }
 
+/**
+ * Restoration-only preview: no DB row, no model call, no GPU. Returns both
+ * image URLs so the UI can show the pipeline effect immediately.
+ */
+export function previewRestoration(file, configName) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("config_name", configName || "original");
+  return request("/api/manuscripts/preview", { method: "POST", body: form });
+}
+
 export const PRESET_CONFIGS = [
   "original",
   "grayscale",
