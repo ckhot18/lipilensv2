@@ -42,6 +42,10 @@ data/MODI_HChar/
 experiments/results/_replay_index.json
 # Colab working files
 .ipynb_checkpoints/
+ngrok_token.txt
+server.log
+server.pid
+*.log
 
 # OS junk
 .DS_Store
