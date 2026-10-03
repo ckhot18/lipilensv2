@@ -7,6 +7,7 @@ Reads sweep hyp files + data/evaluation refs. Writes:
     docs/sweep_heatmap.png, docs/sweep_means.png
 """
 
+import argparse
 import csv
 import json
 import math
@@ -26,14 +27,24 @@ RESULTS = PROJECT_ROOT / "experiments" / "results"
 DOCS = PROJECT_ROOT / "docs"
 
 
-def hyp_for(config: str, mid: str) -> str | None:
+def hyp_for(config: str, mid: str, tag: str = "EXP-005") -> str | None:
+    """Locate a hypothesis file.
+
+    Prefer the output of THIS run for every config, including the original
+    baseline. The legacy fallback below is only for reproducing the original
+    EXP-005 numbers: mixing a freshly generated baseline with older treatment
+    outputs (or vice versa) would compare different pipelines and make the
+    treatments look worse than they are.
+    """
+    p = SWEEP_DIR / f"{tag}_{config}_{mid}_hyp.txt"
+    if p.exists():
+        return p.read_text(encoding="utf-8").strip()
     if config == "original":
-        # Original-condition hyps live under their EXP tags.
-        tag = "EXP-002" if mid in ("MT-001", "MT-002", "MT-003") else "EXP-004"
-        p = RESULTS / f"{tag}_{mid}_hyp.txt"
-    else:
-        p = SWEEP_DIR / f"EXP-005_{config}_{mid}_hyp.txt"
-    return p.read_text(encoding="utf-8").strip() if p.exists() else None
+        legacy = "EXP-002" if mid in ("MT-001", "MT-002", "MT-003") else "EXP-004"
+        p = RESULTS / f"{legacy}_{mid}_hyp.txt"
+        if p.exists():
+            return p.read_text(encoding="utf-8").strip()
+    return None
 
 
 def mean(xs: list[float]) -> float:
@@ -48,10 +59,18 @@ def stdev(xs: list[float]) -> float:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Summarise a sweep run")
+    parser.add_argument("--tag", default="EXP-005",
+                        help="experiment tag written by run_sweep.py --tag")
+    parser.add_argument("--suffix", default="",
+                        help="suffix for the output filenames, e.g. _seg")
+    args = parser.parse_args()
+    tag, sfx = args.tag, args.suffix
+
     rows = []
     for config in CONFIGS:
         for mid in ALL_IDS:
-            hyp = hyp_for(config, mid)
+            hyp = hyp_for(config, mid, tag)
             if hyp is None:
                 continue
             ref = (PROJECT_ROOT / "data" / "evaluation" / f"{mid}_ref.txt"
@@ -61,7 +80,7 @@ def main() -> None:
                          "wer": round(wer(hyp, ref), 4),
                          "hyp_chars": len(hyp), "ref_chars": len(ref)})
 
-    with open(RESULTS / "sweep_metrics.csv", "w", newline="") as f:
+    with open(RESULTS / f"sweep_metrics{sfx}.csv", "w", newline="") as f:
         wr = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         wr.writeheader()
         wr.writerows(rows)
@@ -90,7 +109,7 @@ def main() -> None:
             "wins_vs_original": wins, "ties": ties, "losses": losses,
         }
     summary = {"n_rows": len(rows), "by_config": by_config}
-    (RESULTS / "sweep_summary.json").write_text(json.dumps(summary, indent=2))
+    (RESULTS / f"sweep_summary{sfx}.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
 
     # --- figures ---------------------------------------------------------
@@ -119,7 +138,7 @@ def main() -> None:
     fig.suptitle(f"Phase 8 sweep — {subtitle} "
                  f"(descriptive, no significance claims)", fontsize=12)
     fig.tight_layout()
-    fig.savefig(DOCS / "sweep_means.png", dpi=150)
+    fig.savefig(DOCS / f"sweep_means{sfx}.png", dpi=150)
     plt.close(fig)
 
     # Heatmap of CER: rows=configs, cols=samples.
@@ -136,7 +155,7 @@ def main() -> None:
     ax.set_title("CER heatmap (green=low). Blank = pending.")
     fig.colorbar(im, ax=ax, label="CER")
     fig.tight_layout()
-    fig.savefig(DOCS / "sweep_heatmap.png", dpi=150)
+    fig.savefig(DOCS / f"sweep_heatmap{sfx}.png", dpi=150)
     plt.close(fig)
     print("saved sweep_metrics.csv, sweep_summary.json, sweep_means.png, "
           "sweep_heatmap.png")

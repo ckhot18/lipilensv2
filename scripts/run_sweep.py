@@ -37,6 +37,10 @@ def main() -> None:
     parser.add_argument("--samples", nargs="*", default=None)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--tag", default="EXP-005",
+        help="experiment tag; change it so a new run does not resume-skip "
+             "the outputs of an earlier one")
     args = parser.parse_args()
 
     configs = list(PRESET_CONFIGS) if args.all else (args.configs or [])
@@ -46,9 +50,10 @@ def main() -> None:
         print(f"Unknown configs: {unknown}")
         sys.exit(1)
 
+    tag = args.tag
     jobs = [(c, m) for c in configs for m in samples
-            if not (SWEEP_DIR / f"EXP-005_{c}_{m}_hyp.txt").exists()]
-    print(f"configs={configs} samples={len(samples)} "
+            if not (SWEEP_DIR / f"{tag}_{c}_{m}_hyp.txt").exists()]
+    print(f"tag={tag} configs={configs} samples={len(samples)} "
           f"pending={len(jobs)} (resume-skipped "
           f"{len(configs) * len(samples) - len(jobs)})", flush=True)
     if args.dry_run or not jobs:
@@ -70,7 +75,7 @@ def main() -> None:
                 f"data/raw/mode_trans/{mid}.png", config,
                 output_dir="data/processed/_pipeline")
             nchars = len(out.transcription)
-            (SWEEP_DIR / f"EXP-005_{config}_{mid}_hyp.txt").write_text(
+            (SWEEP_DIR / f"{tag}_{config}_{mid}_hyp.txt").write_text(
                 out.transcription, encoding="utf-8")
         except Exception as exc:  # noqa: BLE001
             status, err = "FAILED", f"{type(exc).__name__}: {exc}"[:160]
