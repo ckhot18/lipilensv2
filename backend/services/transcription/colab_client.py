@@ -11,11 +11,16 @@ from backend.services.transcription.inference import TranscriptionResult, Transc
 logger = logging.getLogger(__name__)
 
 class ColabTranscriptionService(TranscriptionService):
-    def transcribe(self, image_path: str | Path, prompt: str) -> TranscriptionResult:
+    def transcribe(self, image_path: str | Path, prompt: str,
+                   on_progress=None) -> TranscriptionResult:
         if not COLAB_ENDPOINT_URL:
             raise ValueError("COLAB_ENDPOINT_URL is not configured.")
 
         logger.info(f"Transcribing image via Colab: {image_path}")
+        # Colab has one line per request, so the whole remote call is one step.
+        if on_progress is not None:
+            on_progress({"stage": "loading_model",
+                         "message": "Sending the page to the Colab GPU"})
         
         with open(image_path, "rb") as f:
             image_b64 = base64.b64encode(f.read()).decode("utf-8")
@@ -58,10 +63,15 @@ class ColabTranscriptionService(TranscriptionService):
 
         data = response.json()
         result_text = data.get("transcription", "")
+        if on_progress is not None:
+            on_progress({"stage": "line_done", "index": 1, "lines_total": 1,
+                         "text": (result_text or "").strip(),
+                         "partial": (result_text or "").strip()})
 
         return TranscriptionResult(
             text=result_text,
             model_name="Remote Colab (Qwen2.5-VL-3B + LoRA)",
             inference_mode="colab",
-            raw_output=result_text
+            raw_output=result_text,
+            line_count=1,
         )

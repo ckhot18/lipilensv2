@@ -52,6 +52,30 @@ class ManuscriptDetail(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TranscriptionProgressResponse(BaseModel):
+    """Live state of one background transcription run.
+
+    Polled by the frontend while a page is being read. `partial_text` holds
+    the lines finished so far so the UI can fill in as it goes, and `done`
+    tells the poller when to stop.
+    """
+    manuscript_id: int
+    state: str = "queued"
+    stage: str = "queued"
+    message: str = ""
+    percent: int = 0
+    lines_total: int = 0
+    lines_done: int = 0
+    partial_text: str = ""
+    last_line: str = ""
+    error: str = ""
+    elapsed_s: float = 0.0
+    eta_s: float | None = None
+    done: bool = False
+
+    model_config = {"from_attributes": True}
+
+
 class VerifyRequest(BaseModel):
     verified_transcription: str = Field(min_length=1, max_length=5000)
 

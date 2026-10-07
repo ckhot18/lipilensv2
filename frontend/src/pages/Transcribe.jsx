@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CompareSlider from "../components/CompareSlider.jsx";
 import Dropzone from "../components/Dropzone.jsx";
 import PipelineSelect from "../components/PipelineSelect.jsx";
+import ProgressPanel from "../components/ProgressPanel.jsx";
 import StatCards from "../components/StatCards.jsx";
 import TextPanel from "../components/TextPanel.jsx";
 import {
@@ -10,14 +11,19 @@ import {
   IconShieldCheck,
 } from "../components/Icons.jsx";
 import {
+  getManuscript,
   imgUrl,
   previewRestoration,
-  transcribeManuscript,
+  startTranscription,
+  transcriptionProgress,
   uploadManuscript,
   verifyTranscription,
 } from "../api/client";
 
 const PROCESSING_FLOOR_MS = 1600;
+
+/** How often to ask the backend how far the read has got. */
+const POLL_MS = 1000;
 
 export default function Transcribe({
   autoFile,
@@ -40,14 +46,44 @@ export default function Transcribe({
   const [verified, setVerified] = useState(false);
   const [readMs, setReadMs] = useState(null);
   const [settled, setSettled] = useState(true);
+  const [progress, setProgress] = useState(null);
 
-  const busyRef = useRef(Boolean(autoFile));
+  const reading = phase === "reading";
+
+  // Re-entrancy latch, so a second click in the same tick cannot start a
+  // second run. `busy` state alone is not enough here: `read` is a useCallback
+  // that cannot see a fresh `busy` before the re-render.
+  //
+  // It must start false — unconditionally. Seeding it from `autoFile` (as this
+  // once did) wedged every run started from the Home page: the button still
+  // looked enabled, but `read` bailed on its first line forever, so no request
+  // was ever sent. Nothing else clears it until a file is chosen here, which
+  // is why it presented as "nothing happens, no error".
+  const busyRef = useRef(false);
   const settleTimer = useRef(null);
   const initialPipeline = useRef(configName);
   const [dropKey, setDropKey] = useState(0);
   const previewSeq = useRef(0);
+  const pollRef = useRef(null);
+  const stopPollingRef = useRef(null);
 
   useEffect(() => () => clearTimeout(settleTimer.current), []);
+
+  /** Stop watching a run; safe to call when nothing is being watched. */
+  const stopPolling = useCallback(() => {
+    clearTimeout(pollRef.current);
+    pollRef.current = null;
+    if (stopPollingRef.current) {
+      stopPollingRef.current();
+      stopPollingRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  useEffect(() => {
+    if (!reading) stopPolling();
+  }, [reading, stopPolling]);
 
   const runPreview = useCallback(
     async (source, pipeline) => {
@@ -79,6 +115,7 @@ export default function Transcribe({
     clearTimeout(settleTimer.current);
     previewSeq.current += 1;
     busyRef.current = false;
+    setBusy(false);
     setDropKey((n) => n + 1);
     setFile(null);
     setPreview(null);
@@ -94,10 +131,12 @@ export default function Transcribe({
     setSettled(true);
     setTitle("");
     setIdentifier("");
+    setProgress(null);
   }, []);
 
   const beginRun = useCallback(() => {
-    setBusy(true);
+    // Deliberately does NOT touch `busy`/`busyRef`: `read` owns both, so the
+    // button state and the re-entrancy latch can never drift apart.
     setError("");
     setNotice("");
     setPhase("cleaning");
@@ -105,12 +144,82 @@ export default function Transcribe({
     setVerified(false);
     setSettled(false);
     setReadMs(null);
+    setProgress(null);
   }, []);
+
+  /**
+   * Follow a running transcription until it reports done.
+   *
+   * Resolves once the archive row exists, so callers can treat it like the
+   * old blocking call. Rejects only if the job itself failed — a dropped poll
+   * is retried, because a hiccup on the progress endpoint must not lose a
+   * five-minute run that is still going on the server. Polling stops if the
+   * user navigates away, but the server keeps reading either way.
+   */
+  const watchTranscription = useCallback(
+    (manuscriptId, startedAt) =>
+      new Promise((resolve, reject) => {
+        let polls = 0;
+        let live = true;
+        const tick = async () => {
+          try {
+            const p = await transcriptionProgress(manuscriptId);
+            if (!live) return;
+            polls += 1;
+            setProgress(p);
+
+            if (p.state === "failed") {
+              reject(new Error(p.error || "Transcription failed"));
+              return;
+            }
+            if (p.done) {
+              // The worker commits the row just before flagging done.
+              const full = await getManuscript(manuscriptId);
+              setResult(full);
+              setDraft(
+                full.transcription?.verified_transcription ||
+                  full.transcription?.ai_transcription ||
+                  ""
+              );
+              setReadMs(performance.now() - startedAt);
+              setPhase("done");
+              resolve(full);
+              return;
+            }
+            pollRef.current = setTimeout(tick, POLL_MS);
+          } catch (err) {
+            if (!live) return;
+            // Tolerate a few bad polls before giving up: the run continues
+            // server-side regardless of what the browser can see.
+            if (polls > 5) {
+              reject(err);
+              return;
+            }
+            pollRef.current = setTimeout(tick, POLL_MS * 2);
+          }
+        };
+        tick();
+        // Released on unmount so an in-flight poll cannot resurrect the loop.
+        stopPollingRef.current = () => {
+          live = false;
+        };
+      }),
+    []
+  );
 
   const read = useCallback(
     async (source, pipeline) => {
-      if (!source || busyRef.current) return;
+      if (!source) {
+        // Nothing to read: never strand the UI on "cleaning".
+        setPhase("idle");
+        setSettled(true);
+        return;
+      }
+      if (busyRef.current) return;
       busyRef.current = true;
+      // `read` owns `busy` for its whole lifetime, so the flag and the latch
+      // can never disagree about whether a run is in flight.
+      setBusy(true);
       const started = performance.now();
 
       let ms;
@@ -152,17 +261,16 @@ export default function Transcribe({
       }
 
       setPhase("reading");
+      setProgress(null);
       try {
-        const full = await transcribeManuscript(ms.id);
-        setResult(full);
-        setDraft(
-          full.transcription?.verified_transcription ||
-            full.transcription?.ai_transcription ||
-            ""
-        );
-        setReadMs(performance.now() - started);
-        setPhase("done");
+        // The model reads in the background; this only starts the job. From
+        // here the UI follows GET /progress instead of blocking on a request
+        // that stays open for minutes.
+        await startTranscription(ms.id);
+        await watchTranscription(ms.id, started);
       } catch (err) {
+        stopPolling();
+        setProgress(null);
         setError(`${err.message} — the cleaned image is safe in your library.`);
         setPhase("cleaned");
       } finally {
@@ -170,7 +278,7 @@ export default function Transcribe({
         busyRef.current = false;
       }
     },
-    [identifier, title]
+    [identifier, stopPolling, title, watchTranscription]
   );
 
   useEffect(() => {
@@ -229,10 +337,14 @@ export default function Transcribe({
 
   const tr = result?.transcription;
   const isVerified = verified || Boolean(tr?.verified_transcription);
-  const reading = phase === "reading";
   const archived = Boolean(result);
   const originalUrl = archived ? imgUrl(result.original_image_url) : preview?.original;
   const restoredUrl = archived ? imgUrl(result.restored_image_url) : preview?.restored;
+  // Lines read so far. The archive does not store the count, so while a run is
+  // live this comes from the job and it disappears on reload — better than a
+  // permanent dash, and honest about where it came from.
+  const linesRead = progress?.lines_total || tr?.line_count || null;
+  const streaming = reading ? progress?.partial_text || "" : "";
 
   return (
     <>
@@ -256,7 +368,7 @@ export default function Transcribe({
         pipeline={archived || preview ? configName : null}
         model={tr?.model_name}
         mode={tr?.inference_mode}
-        lines={tr?.line_count ?? null}
+        lines={linesRead}
         restoreMs={previewMs}
         readMs={readMs}
       />
@@ -323,54 +435,47 @@ export default function Transcribe({
               )}
             </div>
             <p className="xs muted" style={{ margin: 0 }}>
-              Restoration above needs no GPU. Only this button waits on the model
-              (20–70 s per line group on Colab).
+              Restoration above needs no GPU. Only this button waits on the model —
+              about 95 s to load it once, then ~25 s per text line. Progress
+              and the text appear here as each line is read.
             </p>
           </form>
         </div>
 
         <div className="analysis-side">
-          {reading ? (
-            <section className="card">
-              <div className="textcard-head">
-                <h3>Digitized Text</h3>
+          <section className="card">
+            <div className="textcard-head">
+              <h3>Digitized Text</h3>
+              {reading ? (
+                <span className="badge accent">Reading…</span>
+              ) : isVerified ? (
+                <span className="badge ok" style={{ marginLeft: 8 }}>
+                  <IconShieldCheck style={{ width: 11, height: 11 }} />
+                  Verified
+                </span>
+              ) : tr ? (
+                <span className="badge warn" style={{ marginLeft: 8 }}>
+                  AI draft
+                </span>
+              ) : null}
+            </div>
+
+            {reading && <ProgressPanel progress={progress} />}
+
+            <p className="textcard-body">
+              {reading
+                ? streaming || "—"
+                : tr?.ai_transcription || "—"}
+            </p>
+
+            {reading && !streaming && (
+              <div className="skeleton-lines" style={{ marginTop: 12 }}>
+                <span />
+                <span />
+                <span />
               </div>
-              <div className="reading">
-                <span className="spinner" />
-                <p className="reading-text">
-                  Reading the manuscript line by line.
-                  <span className="muted">
-                    {" "}
-                    Each line is upscaled so the model can resolve the characters —
-                    this is the slow part.
-                  </span>
-                </p>
-              </div>
-              <div className="skeleton-lines">
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-            </section>
-          ) : (
-            <TextPanel
-              title="Digitized Text"
-              value={tr?.ai_transcription}
-              badge={
-                isVerified ? (
-                  <span className="badge ok" style={{ marginLeft: 8 }}>
-                    <IconShieldCheck style={{ width: 11, height: 11 }} />
-                    Verified
-                  </span>
-                ) : tr ? (
-                  <span className="badge warn" style={{ marginLeft: 8 }}>
-                    AI draft
-                  </span>
-                ) : null
-              }
-            />
-          )}
+            )}
+          </section>
 
           {tr?.translation && (
             <TextPanel title="Translation (English)" value={tr.translation} latin />

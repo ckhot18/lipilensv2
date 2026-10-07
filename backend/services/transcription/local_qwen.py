@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Any, Callable
 
 import torch
 from PIL import Image
@@ -14,19 +15,28 @@ _model = None
 _processor = None
 
 
+def _emit(on_progress: Callable[[dict[str, Any]], None] | None,
+          **event: Any) -> None:
+    if on_progress is not None:
+        on_progress(event)
+
+
 class LocalQwenTranscriptionService(TranscriptionService):
     def __init__(self, load_on_init: bool = False):
         if load_on_init:
             self._load_model()
 
-    def _load_model(self):
+    def _load_model(self, on_progress=None):
         global _model, _processor
-        
+
         if _model is not None and _processor is not None:
             return
 
         logger.info(f"Loading local model: base={BASE_MODEL_NAME}, adapter={LORA_ADAPTER_NAME}")
-        
+        # Weight loading is the first ~95 s of a cold run and happens with no
+        # output at all; the UI needs to show that something is happening.
+        _emit(on_progress, stage="loading_model")
+
         try:
             from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
             from peft import PeftModel
@@ -50,6 +60,7 @@ class LocalQwenTranscriptionService(TranscriptionService):
             _processor = AutoProcessor.from_pretrained(BASE_MODEL_NAME, max_pixels=MAX_MODEL_PIXELS)
             
             logger.info("Local model loaded successfully.")
+            _emit(on_progress, stage="model_ready")
             
             # Update health state
             from backend.api.health import set_model_loaded
@@ -57,10 +68,13 @@ class LocalQwenTranscriptionService(TranscriptionService):
             
         except Exception as e:
             logger.error(f"Failed to load local model: {e}")
+            from backend.api.health import set_load_failed
+            set_load_failed()
             raise
 
-    def transcribe(self, image_path: str | Path, prompt: str) -> TranscriptionResult:
-        self._load_model()
+    def transcribe(self, image_path: str | Path, prompt: str,
+                   on_progress=None) -> TranscriptionResult:
+        self._load_model(on_progress)
         
         global _model, _processor
         
@@ -84,7 +98,7 @@ class LocalQwenTranscriptionService(TranscriptionService):
         result_text = _processor.batch_decode(
             out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
         )[0].strip()
-        
+
         return TranscriptionResult(
             text=result_text,
             model_name=f"{BASE_MODEL_NAME} + {LORA_ADAPTER_NAME}",

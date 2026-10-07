@@ -954,6 +954,133 @@ main.full {
   }
 }
 
+/* ---- transcription progress ---- */
+.prog {
+  margin-bottom: 14px;
+}
+
+.prog-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.prog-msg {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.prog-pct {
+  flex: 0 0 auto;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+}
+
+.prog-track {
+  position: relative;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.prog-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 65%, var(--sun)) 100%
+  );
+  transition: width 0.45s cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+/* Model load and line-finding have no knowable duration, so the bar moves
+   without claiming a percentage it cannot honestly report. */
+.prog-track.sweep .prog-fill {
+  width: 38%;
+  transition: none;
+  animation: progsweep 1.5s ease-in-out infinite;
+}
+
+@keyframes progsweep {
+  0% {
+    transform: translateX(-105%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.prog-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 9px 0 0;
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.prog-sep {
+  color: var(--faint);
+  margin-right: 6px;
+}
+
+.prog-last {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  border-left: 2px solid var(--accent);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.prog-last .deva {
+  font-family: var(--deva);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.prog-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prog-fill {
+    transition: none;
+  }
+
+  .prog-track.sweep .prog-fill {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
 /* ---- text panels ---- */
 .textcard-head {
   display: flex;

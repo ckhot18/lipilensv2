@@ -215,11 +215,15 @@ def transcribe_only(
     config_dict: dict[str, Any],
     prompt: str = DEFAULT_PROMPT,
     cache_dir: str | Path | None = None,
+    on_progress=None,
 ) -> TranscribeOutput:
     """Run transcription on an already-restored image file.
 
     `image_bytes` must be the ORIGINAL upload bytes (plus config_dict and
     prompt they form the deterministic cache key).
+
+    `on_progress`, when given, is called with progress events as the model
+    advances so a long run can be watched instead of waited on.
     """
     mode = _current_mode_label()
     cache_hit = False
@@ -241,9 +245,13 @@ def transcribe_only(
         text, model_name = cached_text, cached_model
         inference_mode = mode
         logger.info("Transcription cache HIT (%s) — model call skipped", key)
+        if on_progress is not None:
+            on_progress({"stage": "line_done", "index": 1, "lines_total": 1,
+                         "text": text, "partial": text})
     else:
         service = _get_service()
-        tresult = service.transcribe(Path(restored_image_path), prompt)
+        tresult = service.transcribe(Path(restored_image_path), prompt,
+                                     on_progress)
         text, model_name = tresult.text, tresult.model_name
         inference_mode = tresult.inference_mode
         if cache_dir is not None:

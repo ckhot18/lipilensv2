@@ -90,7 +90,7 @@ class _StubService:
     def __init__(self):
         self.calls = 0
 
-    def transcribe(self, image_path, prompt):
+    def transcribe(self, image_path, prompt, on_progress=None):
         self.calls += 1
         img = cv2.imread(str(image_path), 0)
         assert img is not None and img.size > 0
@@ -144,7 +144,7 @@ def test_wrapper_falls_back_when_every_line_fails(tmp_path):
     cv2.imwrite(str(src), page)
 
     class _Failing(_StubService):
-        def transcribe(self, image_path, prompt):
+        def transcribe(self, image_path, prompt, on_progress=None):
             if str(image_path).endswith("page.png"):
                 return TranscriptionResult(
                     text="whole page", model_name="stub",

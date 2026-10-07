@@ -4,14 +4,19 @@ const BASE = (
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
 ).replace(/\/$/, "");
 
+/** Cheap calls (restoration, library, verify, progress) answer in seconds. */
+const DEFAULT_TIMEOUT_MS = 120000;
+
 /** Backend returns image paths like /files/raw/1/original.png — absolutize. */
 export function imgUrl(path) {
   return path ? BASE + path : null;
 }
 
-async function request(path, options = {}) {
-  const controller = AbortSignal.timeout(120000);
-  const res = await fetch(BASE + path, { ...options, signal: controller });
+async function request(path, { timeoutMs = DEFAULT_TIMEOUT_MS, ...options } = {}) {
+  const res = await fetch(BASE + path, {
+    ...options,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
     try {
@@ -39,8 +44,19 @@ export function uploadManuscript(file, { title, identifier, configName, transcri
   return request("/api/manuscripts", { method: "POST", body: form });
 }
 
-export function transcribeManuscript(id) {
+/**
+ * Transcription is the one slow act: the model loads on first use (~95 s) and
+ * then each text line costs ~25 s on a 4 GB GPU, so a nine-line page needs over
+ * five minutes. It therefore runs as a background job — this call only starts
+ * it and returns immediately, and the UI follows it with transcriptionProgress.
+ */
+export function startTranscription(id) {
   return request(`/api/manuscripts/${id}/transcribe`, { method: "POST" });
+}
+
+/** One poll of a running transcription. Cheap, so the cheap timeout applies. */
+export function transcriptionProgress(id) {
+  return request(`/api/manuscripts/${id}/progress`);
 }
 
 export function listManuscripts({ search, verifiedOnly, limit = 50, offset = 0 } = {}) {

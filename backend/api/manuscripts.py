@@ -1,6 +1,7 @@
 """Manuscript routes: upload -> restore -> transcribe -> retrieve -> search."""
 
 import logging
+import threading
 from pathlib import Path
 
 import cv2
@@ -13,11 +14,13 @@ from backend.database.session import get_db
 from backend.schemas.manuscript import (
     ManuscriptDetail,
     ManuscriptSummary,
+    TranscriptionProgressResponse,
     TranscriptionResponse,
 )
 from backend.services import pipeline as pipeline_mod
 from backend.services.archive import repository as repo
 from backend.services.restoration.pipeline import PRESET_CONFIGS
+from backend.services.transcription import progress as job_registry
 
 logger = logging.getLogger(__name__)
 
@@ -151,12 +154,65 @@ def upload_manuscript(
     return _to_detail(repo.get_manuscript(session, ms.id))
 
 
-@router.post("/{manuscript_id}/transcribe", response_model=ManuscriptDetail)
-def transcribe_manuscript(manuscript_id: int,
-                          session: Session = Depends(get_db)):
-    """Second act: run the model on an already-restored manuscript."""
+def _new_session() -> Session:
+    """Session for the background worker.
+
+    The request's own session is closed the moment the 202 goes out, so the
+    worker needs its own. Indirected through a function so tests can point it
+    at a temp database instead of the real archive.
+    """
+    from backend.database.session import SessionLocal
+
+    return SessionLocal()
+
+
+def _run_transcription(manuscript_id: int, job) -> None:
+    """Worker body: run the model, then write the archive row once.
+
+    Runs on a background thread, so it opens its own Session and never lets a
+    failed run leave a half-written transcription behind.
+    """
     from backend.services.pipeline import DEFAULT_PROMPT
 
+    session = _new_session()
+    try:
+        with session:
+            row = repo.get_manuscript(session, manuscript_id)
+            if row is None:
+                job.fail("Manuscript not found")
+                return
+
+            cfg_name = row.config.name if row.config else "original"
+            raw = Path(row.original_image_path).read_bytes()
+            t = pipeline_mod.transcribe_only(
+                row.restored_image_path, raw,
+                PRESET_CONFIGS[cfg_name].to_dict(), DEFAULT_PROMPT,
+                on_progress=job.apply,
+            )
+            repo.create_transcription(
+                session, manuscript_id, ai_text=t.transcription,
+                model_name=t.model_name, inference_mode=t.inference_mode,
+                config_id=row.preprocessing_config_id)
+            session.commit()
+        job.finish(t.transcription)
+        logger.info("Transcription finished for manuscript %s", manuscript_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Transcription failed for manuscript %s",
+                         manuscript_id)
+        job.fail(f"{type(exc).__name__}: {exc}")
+
+
+@router.post("/{manuscript_id}/transcribe", response_model=ManuscriptDetail,
+             status_code=202)
+def transcribe_manuscript(manuscript_id: int,
+                          session: Session = Depends(get_db)):
+    """Second act: start the model on an already-restored manuscript.
+
+    Returns 202 immediately. Reading a page costs a ~95 s cold model load plus
+    ~25 s per line, so the work is handed to a background thread and the
+    client watches GET /{id}/progress until the job reports done. The archive
+    row is still written exactly once, at the end.
+    """
     row = repo.get_manuscript(session, manuscript_id)
     if row is None:
         raise HTTPException(404, "Manuscript not found")
@@ -165,23 +221,43 @@ def transcribe_manuscript(manuscript_id: int,
     if row.transcriptions:
         # Idempotent: reading twice must not duplicate rows.
         return _to_detail(row)
-    raw = Path(row.original_image_path).read_bytes()
-    cfg_name = (row.config.name if row.config else "full_restoration")
-    try:
-        t = pipeline_mod.transcribe_only(
-            row.restored_image_path, raw,
-            PRESET_CONFIGS[cfg_name].to_dict(), DEFAULT_PROMPT)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Transcription failed for manuscript %s",
-                         manuscript_id)
-        raise HTTPException(
-            503, f"Transcription failed ({type(exc).__name__})") from exc
-    repo.create_transcription(
-        session, manuscript_id, ai_text=t.transcription,
-        model_name=t.model_name, inference_mode=t.inference_mode,
-        config_id=row.preprocessing_config_id)
-    session.commit()
-    return _to_detail(repo.get_manuscript(session, manuscript_id))
+    if job_registry.is_running(manuscript_id):
+        # A run is already in flight — join it instead of loading the model
+        # twice onto a 4 GB GPU.
+        return _to_detail(row)
+
+    job = job_registry.start_job(manuscript_id)
+    threading.Thread(
+        target=_run_transcription,
+        args=(manuscript_id, job),
+        name=f"transcribe-{manuscript_id}",
+        daemon=True,
+    ).start()
+    return _to_detail(row)
+
+
+@router.get("/{manuscript_id}/progress",
+            response_model=TranscriptionProgressResponse)
+def transcription_progress(manuscript_id: int,
+                           session: Session = Depends(get_db)):
+    """Live state of a transcription run, for the poller.
+
+    Falls back to the archive when there is no live job: after a server restart
+    the registry is empty, and the poller must still learn that a stored
+    transcription is the finished result rather than spinning forever.
+    """
+    job = job_registry.get_job(manuscript_id)
+    if job is not None:
+        return job.snapshot()
+
+    row = repo.get_manuscript(session, manuscript_id)
+    if row is None:
+        raise HTTPException(404, "Manuscript not found")
+    stored = row.transcriptions[-1] if row.transcriptions else None
+    return job_registry.idle_snapshot(
+        manuscript_id,
+        stored.ai_transcription if stored is not None else None,
+    )
 
 
 @router.get("", response_model=list[ManuscriptSummary])

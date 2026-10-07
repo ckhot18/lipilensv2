@@ -22,7 +22,7 @@ class StubService:
         self.seen_paths = []
         self.calls = 0
 
-    def transcribe(self, image_path, prompt):
+    def transcribe(self, image_path, prompt, on_progress=None):
         self.calls += 1
         self.seen_paths.append(str(image_path))
         assert Path(image_path).exists(), "model must receive a real file"
