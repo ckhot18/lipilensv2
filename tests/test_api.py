@@ -180,6 +180,9 @@ def test_pagination(client):
 def test_health_reports_inference_mode(client, monkeypatch):
     import requests
 
+    from backend import config as app_config
+    from backend.api import health as health_mod
+
     def _fake_get(*args, **kwargs):
         class _R:
             status_code = 200
@@ -190,10 +193,25 @@ def test_health_reports_inference_mode(client, monkeypatch):
         return _R()
 
     monkeypatch.setattr(requests, "get", _fake_get)
+    monkeypatch.setattr(health_mod, "_load_failed", False)
     body = client.get("/api/health").json()
     assert body["status"] == "ok"
-    from backend import config as app_config
     assert body["inference_mode"] == app_config.INFERENCE_MODE
     if app_config.INFERENCE_MODE == "colab":
         assert body["colab_reachable"] is True
         assert body["colab_model_loaded"] is True
+    else:
+        # Lazy load: not-loaded-yet must stay healthy, no degraded reason.
+        assert "reason" not in body
+
+
+def test_health_local_load_failure_degrades(client, monkeypatch):
+    from backend import config as app_config
+    from backend.api import health as health_mod
+
+    if app_config.INFERENCE_MODE != "local":
+        pytest.skip("local-mode behaviour")
+    monkeypatch.setattr(health_mod, "_load_failed", True)
+    body = client.get("/api/health").json()
+    assert body["status"] == "degraded"
+    assert body["reason"] == "local model failed to load"

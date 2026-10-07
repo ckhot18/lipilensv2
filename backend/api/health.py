@@ -6,10 +6,16 @@ router = APIRouter(prefix="/health", tags=["Health"])
 
 # Global or state-dependent flag for model status
 _model_loaded: bool = False
+_load_failed: bool = False
 
 def set_model_loaded(loaded: bool) -> None:
-    global _model_loaded
+    global _model_loaded, _load_failed
     _model_loaded = loaded
+    _load_failed = False
+
+def set_load_failed() -> None:
+    global _load_failed
+    _load_failed = True
 
 def is_model_loaded() -> bool:
     return _model_loaded
@@ -51,8 +57,9 @@ def check_health():
             body["status"] = "degraded"
             body["reason"] = "colab model not loaded"
     else:
-        # local mode: degrade if model not loaded
-        if not _model_loaded:
+        # local mode: the model lazy-loads on the first transcription, so
+        # "not loaded yet" is healthy — only a failed load attempt degrades.
+        if _load_failed:
             body["status"] = "degraded"
-            body["reason"] = "local model not loaded"
+            body["reason"] = "local model failed to load"
     return body
