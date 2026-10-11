@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="430" viewBox="0 0 980 430" font-family="Inter,Segoe UI,system-ui,sans-serif">
+<rect width="980" height="430" fill="#ffffff"/>
+<text x="40" y="44" fill="#1c1c1e" font-size="20" font-weight="700">Restoration is monotonically harmful; binarisation worst</text>
+<text x="40" y="68" fill="#6e6e76" font-size="12.5">140 model calls, 7 configurations x 20 pages. Control = grayscale (no-op: 0.316)</text>
+<text x="176" y="140" fill="#1c1c1e" font-size="13" text-anchor="end">grayscale</text>
+<rect x="190" y="126" width="640" height="20" rx="4" fill="#f4f4f5"/>
+<rect x="190" y="126" width="405.1" height="20" rx="4" fill="#4f46e5"/>
+<text x="607.1" y="141" fill="#1c1c1e" font-size="12.5" font-weight="600">0.316  (+0.000)</text>
+<text x="176" y="182" fill="#1c1c1e" font-size="13" text-anchor="end">denoised</text>
+<rect x="190" y="168" width="640" height="20" rx="4" fill="#f4f4f5"/>
+<rect x="190" y="168" width="410.4" height="20" rx="4" fill="#4f46e5"/>
+<text x="612.4" y="183" fill="#1c1c1e" font-size="12.5" font-weight="600">0.321  (+0.004)</text>
+<text x="176" y="198" fill="#6e6e76" font-size="10.5" text-anchor="end">on degraded: 0.378</text>
+<text x="176" y="224" fill="#1c1c1e" font-size="13" text-anchor="end">enhanced</text>
+<rect x="190" y="210" width="640" height="20" rx="4" fill="#f4f4f5"/>
+<rect x="190" y="210" width="420.4" height="20" rx="4" fill="#e8a33d"/>
+<text x="622.4" y="225" fill="#1c1c1e" font-size="12.5" font-weight="600">0.328  (+0.012)</text>
+<text x="176" y="240" fill="#6e6e76" font-size="10.5" text-anchor="end">on degraded: 0.376</text>
+<text x="176" y="266" fill="#1c1c1e" font-size="13" text-anchor="end">deskewed</text>
+<rect x="190" y="252" width="640" height="20" rx="4" fill="#f4f4f5"/>
+<rect x="190" y="252" width="424.5" height="20" rx="4" fill="#e8a33d"/>
+<text x="626.5" y="267" fill="#1c1c1e" font-size="12.5" font-weight="600">0.332  (+0.015)</text>
+<text x="176" y="308" fill="#1c1c1e" font-size="13" text-anchor="end">binarized</text>
+<rect x="190" y="294" width="640" height="20" rx="4" fill="#f4f4f5"/>
+<rect x="190" y="294" width="454.6" height="20" rx="4" fill="#c0392b"/>
+<text x="656.6" y="309" fill="#1c1c1e" font-size="12.5" font-weight="600">0.355  (+0.039)</text>
+<text x="176" y="324" fill="#6e6e76" font-size="10.5" text-anchor="end">on degraded: 0.433</text>
+<text x="176" y="350" fill="#1c1c1e" font-size="13" text-anchor="end">full_restoration</text>
+<rect x="190" y="336" width="640" height="20" rx="4" fill="#f4f4f5"/>
+<rect x="190" y="336" width="459.5" height="20" rx="4" fill="#c0392b"/>
+<text x="661.5" y="351" fill="#1c1c1e" font-size="12.5" font-weight="600">0.359  (+0.043)</text>
+<line x1="190" y1="370" x2="830" y2="370" stroke="#e4e4e9"/>
+<text x="510.0" y="396" fill="#6e6e76" font-size="12" text-anchor="middle">Mean CER. Lower is better. Grey text = same configuration measured on simulated photographic degradation.</text>
+</svg>

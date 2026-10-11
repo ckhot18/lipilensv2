@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="400" viewBox="0 0 980 400" font-family="Inter,Segoe UI,system-ui,sans-serif">
+<rect width="980" height="400" fill="#ffffff"/>
+<text x="40" y="44" fill="#1c1c1e" font-size="20" font-weight="700">Failure case MT-003 — segmentation invents text</text>
+<text x="40" y="68" fill="#6e6e76" font-size="12.5">The hardest page in the corpus (baseline CER 0.517); segmentation drives it to 1.458</text>
+<text x="40" y="110" fill="#1c1c1e" font-size="12.5" font-weight="600">Expert reference</text>
+<text x="40" y="136" fill="#1c1c1e" font-size="15" font-family='"Nirmala UI","Noto Sans Devanagari",sans-serif'>देव सिद दडस याचा व येसाजी सिंदे या उभयताचा कजीया भानजी</text>
+<text x="40" y="160" fill="#1c1c1e" font-size="15" font-family='"Nirmala UI","Noto Sans Devanagari",sans-serif'>गुजर फलटणकर याच्या कर्जा बदल होऊन साहेबा पासी आले त्यावरून साहेबी</text>
+<text x="40" y="206" fill="#4f46e5" font-size="12.5" font-weight="600">Whole page  (CER 0.517)</text>
+<text x="40" y="232" fill="#4f46e5" font-size="15" font-family='"Nirmala UI","Noto Sans Devanagari",sans-serif'>देसी पपूस याचा व येखनीस त्याउजा येता पाकजिया भाजनी</text>
+<text x="40" y="256" fill="#4f46e5" font-size="15" font-family='"Nirmala UI","Noto Sans Devanagari",sans-serif'>उजवाल दणरथाचा तर्फ होता धोंग साहेब पाटील त्याजवरून अन्याये</text>
+<text x="40" y="302" fill="#c0392b" font-size="12.5" font-weight="600">Segmented   (CER 1.458)</text>
+<text x="40" y="328" fill="#c0392b" font-size="15" font-family='"Nirmala UI","Noto Sans Devanagari",sans-serif'>दोन विदित वृत्त श्रीचा वंशानेक निष्ट प्रति पाठविले त्यावरून २० रुपये १० रुपये ५ रुपये ३ रुपये २ रुपये १ रुपये</text>
+<text x="40" y="352" fill="#c0392b" font-size="15" font-family='"Nirmala UI","Noto Sans Devanagari",sans-serif'>देवसी पंपूर साष्टव येखानी सु याउन येता पाकजी याजा भिडिली फालणार यास्तव दर्श होल धेऊन साहेब पाहिजे आलंकृत वरान अमावासी कृपा लोभ</text>
+</svg>
