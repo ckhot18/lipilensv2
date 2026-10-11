@@ -4,7 +4,7 @@ AI-assisted transcription pipeline for historical Modi-script manuscripts,
 with an embedded empirical study on how image restoration affects
 vision-language transcription accuracy.
 
-**Full write-up with screenshots and charts: [`docs/team_brief/TEAM_BRIEF_REPORT.md`](docs/team_brief/TEAM_BRIEF_REPORT.md)**
+**Team working document and deck: [`docs/team_brief/TEAM_BRIEF_REPORT.md`](docs/team_brief/TEAM_BRIEF_REPORT.md) · [`docs/team_brief/PRESENTATION.md`](docs/team_brief/PRESENTATION.md)**
 
 ```
 photo -> restore -> transcribe -> verify -> archive -> search
