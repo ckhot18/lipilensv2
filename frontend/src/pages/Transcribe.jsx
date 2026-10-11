@@ -31,7 +31,11 @@ export default function Transcribe({
   onOpenLibrary,
 }) {
   const [file, setFile] = useState(autoFile ?? null);
-  const [configName, setConfigName] = useState("enhanced");
+  // `original` deliberately: the model was validated on untouched pages, and
+  // every stronger restoration config measured worse (mean CER 0.316 original
+  // vs 0.328 enhanced vs 0.359 full_restoration). Denoising and CLAHE erase
+  // the thin Modi matras whose deletion is already the model's main error.
+  const [configName, setConfigName] = useState("original");
   const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(Boolean(autoFile));
   const [previewMs, setPreviewMs] = useState(null);

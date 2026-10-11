@@ -21,7 +21,31 @@ def _emit(on_progress: Callable[[dict[str, Any]], None] | None,
         on_progress(event)
 
 
+def _prepare_image(image: "Image.Image") -> "Image.Image":
+    """Upscale the page so the visual-token budget buys more tokens/character.
+
+    `max_pixels` only ever *downscales*: a 1268x463 page is 587k px, already
+    under the 1280*28*28 budget, so raising the budget changes nothing for a
+    whole page. Resampling first is what actually spends the budget on more
+    tokens. LANCZOS keeps stroke edges sharper than the bicubic used for
+    segmentation crops.
+    """
+    from backend import config as app_config
+
+    scale = float(app_config.MODEL_UPSCALE or 1.0)
+    if scale <= 1.01:
+        return image
+    w, h = image.size
+    return image.resize((max(1, int(w * scale)), max(1, int(h * scale))),
+                        Image.LANCZOS)
+
+
 class LocalQwenTranscriptionService(TranscriptionService):
+    # When this service is wrapped by LineSegmentedTranscriptionService the
+    # wrapper emits per-line events and knows the line count; only a bare
+    # service has to announce an unmeasured single step.
+    reports_own_progress = True
+
     def __init__(self, load_on_init: bool = False):
         if load_on_init:
             self._load_model()
@@ -75,11 +99,20 @@ class LocalQwenTranscriptionService(TranscriptionService):
     def transcribe(self, image_path: str | Path, prompt: str,
                    on_progress=None) -> TranscriptionResult:
         self._load_model(on_progress)
-        
+
+        # Emitted here, after the load, so it is not overwritten by the
+        # loading stages. One image is one indivisible unit of work, so there
+        # is no denominator: the UI sweeps rather than sitting at 0% looking
+        # hung, which is what it did before this existed.
+        if self.reports_own_progress:
+            _emit(on_progress, stage="reading", lines_total=0,
+                  message="Reading the page as one block")
+
         global _model, _processor
-        
+        from backend import config as app_config
+
         logger.info(f"Transcribing image locally: {image_path}")
-        image = Image.open(image_path).convert("RGB")
+        image = _prepare_image(Image.open(image_path).convert("RGB"))
         
         messages = [{
             "role": "user",
@@ -92,8 +125,18 @@ class LocalQwenTranscriptionService(TranscriptionService):
         text_in = _processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         inputs = _processor(text=[text_in], images=[image], return_tensors="pt").to(_model.device)
         
-        with torch.no_grad():
-            out = _model.generate(**inputs, max_new_tokens=256, do_sample=False)
+        # Read the knobs at call time so an evaluation sweep can vary them
+        # without paying the ~65 s model load again.
+        gen_kwargs: dict[str, Any] = {
+            "max_new_tokens": int(app_config.MAX_NEW_TOKENS),
+            "do_sample": False,
+        }
+        penalty = float(app_config.REPETITION_PENALTY)
+        if penalty > 1.0:
+            gen_kwargs["repetition_penalty"] = penalty
+
+        with torch.inference_mode():
+            out = _model.generate(**inputs, **gen_kwargs)
             
         result_text = _processor.batch_decode(
             out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True

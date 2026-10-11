@@ -91,6 +91,11 @@ class LineSegmentedTranscriptionService(TranscriptionService):
 
     def __init__(self, inner: TranscriptionService):
         self.inner = inner
+        # This wrapper emits per-line events and knows the line count, so a
+        # wrapped bare service must not also announce its own unmeasured
+        # single step.
+        if hasattr(inner, "reports_own_progress"):
+            inner.reports_own_progress = False
 
     def transcribe(self, image_path: str | Path, prompt: str,
                    on_progress: ProgressCallback | None = None

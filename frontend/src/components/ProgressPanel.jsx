@@ -34,7 +34,11 @@ export default function ProgressPanel({ progress }) {
     eta_s: eta,
   } = progress;
 
-  const sweeping = INDETERMINATE.has(stage);
+  // A whole-page read is one indivisible unit: the backend reports no line
+  // count, so there is no denominator to draw a real bar from. Sweep rather
+  // than sit frozen on a number we would have to invent.
+  const sweeping = INDETERMINATE.has(stage)
+    || (stage === "reading" && !total);
   const width = sweeping ? null : Math.max(2, Math.min(100, percent));
 
   const facts = [];

@@ -107,3 +107,34 @@ def test_pipeline_output_is_json_safe(tmp_path, monkeypatch):
     json.dumps(d)  # must not raise
     assert d["config_dict"]["name"] == "denoised"
     assert len(d["image_sha256"]) == 64
+
+
+def test_service_cache_rebuilds_when_segmentation_setting_changes(tmp_path,
+                                                                 monkeypatch):
+    """SEGMENT_LINES decides the wrapper, so flipping it must not reuse the
+    old one. The 3B model stays loaded either way."""
+    from backend import config as app_config
+
+    made = []
+
+    def factory():
+        made.append(app_config.SEGMENT_LINES)
+        return StubService()
+
+    monkeypatch.setattr(pipe_mod, "get_transcription_service", factory)
+    original = app_config.SEGMENT_LINES
+    try:
+        pipe_mod.clear_service_cache()
+        app_config.SEGMENT_LINES = False
+        pipe_mod._get_service()
+        pipe_mod._get_service()
+        assert made == [False], "same setting must reuse the cached service"
+
+        app_config.SEGMENT_LINES = True
+        pipe_mod._get_service()
+        assert made == [False, True], (
+            "changing SEGMENT_LINES must rebuild the wrapper"
+        )
+    finally:
+        app_config.SEGMENT_LINES = original
+        pipe_mod.clear_service_cache()

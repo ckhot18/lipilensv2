@@ -1,10 +1,21 @@
 """Text-line segmentation and upscaling for vision-language transcription.
 
-A manuscript page holds hundreds of characters but only ~128 merged visual
-tokens after Qwen's ``max_pixels`` downscale — under one token per character,
-which is why whole-page transcription collapses. Splitting the page into text
-lines and upscaling each one spends the same pixel budget on far fewer
-characters, multiplying the tokens available per character.
+Splitting a page into text lines was introduced to raise the visual-token
+budget: a page spends its whole pixel allowance on hundreds of characters, so
+one line gets many more tokens per character. Measured against expert
+references it made accuracy *worse* (mean CER 0.345 -> 0.794 on
+single-column MoDeTrans pages), for two reasons this module now guards against:
+
+1. Thresholding the ink profile with Otsu keeps only the densest core of each
+   line. Modi matras, ascenders and the anusvāra live above and below that
+   core, so they were cropped away — and the adapter's dominant error is
+   already deletions (46%). Bands are now padded to recover the full extent.
+2. Upscaling a thin band to a target height produced 23:1-40:1 slivers at the
+   pixel budget, far outside anything Qwen2.5-VL saw in training. Upscaling is
+   now bounded by the band aspect ratio as well as the budget.
+
+Segmentation is therefore OFF by default (see backend/config.py); this module
+is still used when SEGMENT_LINES=1.
 
 Pure OpenCV/numpy: no GPU, no new dependency.
 """
@@ -17,19 +28,37 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Matches the processor budget in local_qwen.py / the Colab server. Raising it
-# is half the win; line splitting is the other half.
-MAX_MODEL_PIXELS = 1280 * 28 * 28
-
 MIN_BAND_PX = 10
 BAND_GAP_MERGE_PX = 8
 MIN_INK_COLUMNS = 12
 MAX_LINES = 24
-MAX_UPSCALE = 6.0
+MAX_UPSCALE = 3.0
 MIN_UPSCALE = 1.0
 TARGET_BAND_HEIGHT = 220
 PAD_X = 12
 PAD_Y = 10
+
+# A row counts as "on the line" when it holds at least this fraction of the
+# page's peak ink. Low enough to keep matras and ascenders, high enough to stay
+# clear of the inter-line gutter.
+LINE_INK_RATIO = 0.18
+# Vertical padding around a detected band, as a fraction of the band's own
+# height, to put back the ascenders/matras the profile threshold discards.
+BAND_HEIGHT_PAD_RATIO = 0.35
+# A text line is naturally wide (a MoDeTrans line is ~20:1). Beyond this the
+# crop is mostly whitespace or a fragment, and upscaling it produces a sliver
+# the vision encoder cannot use.
+MAX_BAND_ASPECT = 32.0
+
+
+def pixel_budget() -> int:
+    """Pixel budget from config, so one knob controls model and segmentation."""
+    try:
+        from backend import config as app_config
+
+        return int(app_config.MAX_MODEL_PIXELS)
+    except Exception:  # noqa: BLE001 - standalone use must still work
+        return 1280 * 28 * 28
 
 
 def _ink_mask(gray: np.ndarray) -> np.ndarray:
@@ -40,17 +69,27 @@ def _ink_mask(gray: np.ndarray) -> np.ndarray:
 def find_text_bands(gray: np.ndarray) -> list[tuple[int, int]]:
     """Return (top, bottom) row ranges of each horizontal run of text.
 
-    The inter-line gaps are the valleys of the horizontal ink profile. A fixed
-    fraction of the peak never separates them (a dense page peaks near 1.0 while
-    its valleys sit at 0.1), so the cut is placed with Otsu on the profile.
+    A row joins a line when its ink count reaches LINE_INK_RATIO of the page
+    peak. Otsu on the profile (the previous rule) puts the cut so high that
+    only the dense core of each line survives and the matras above and below it
+    are cut away.
     """
     bw = _ink_mask(gray)
     bw = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, np.ones((1, 9), np.uint8))
     profile = (bw > 0).sum(axis=1).astype(np.uint8)
 
-    cut, _ = cv2.threshold(profile.reshape(-1, 1), 0, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    cut = max(1, min(int(cut), max(1, int(profile.max()) - 1)))
-    active = profile >= cut
+    peak = int(profile.max())
+    if peak == 0:
+        return []
+    cut = max(1, int(peak * LINE_INK_RATIO))
+    # Bridge the sparse rows *within* a line (between characters and matras)
+    # without bridging the clear gutter between two lines.
+    active = (profile >= cut).astype(np.uint8)
+    bridge = max(3, int(peak * 0.02))
+    active = cv2.morphologyEx(
+        active.reshape(-1, 1), cv2.MORPH_CLOSE, np.ones((bridge, 1), np.uint8)
+    ).ravel()
+    active = active > 0
 
     raw: list[tuple[int, int]] = []
     start = None
@@ -69,15 +108,19 @@ def find_text_bands(gray: np.ndarray) -> list[tuple[int, int]]:
         if merged and band[0] - merged[-1][1] <= BAND_GAP_MERGE_PX:
             merged[-1] = (merged[-1][0], band[1])
         else:
-            merged.append(list(band))  # type: ignore[arg-type]
-    return [tuple(b) for b in merged]  # type: ignore[misc]
+            merged.append((band[0], band[1]))
+    return merged
 
 
 def _scale_for(band_w: int, band_h: int) -> float:
+    """Upscale factor for a band, bounded by budget, height and aspect ratio."""
     px = band_w * band_h
-    by_budget = (MAX_MODEL_PIXELS / px) ** 0.5 if px else 1.0
+    by_budget = (pixel_budget() / px) ** 0.5 if px else 1.0
     by_height = TARGET_BAND_HEIGHT / band_h if band_h else 1.0
-    scale = min(by_budget, by_height)
+    # Upscaling cannot fix a band that is already too wide and flat: it would
+    # only stretch it further into a sliver.
+    by_aspect = MAX_BAND_ASPECT * band_h / band_w if band_w else 1.0
+    scale = min(by_budget, by_height, by_aspect)
     return max(MIN_UPSCALE, min(MAX_UPSCALE, scale))
 
 
@@ -97,13 +140,17 @@ def segment_lines(image_path: str | Path) -> list[np.ndarray]:
 
     lines: list[np.ndarray] = []
     for top, bottom in bands:
-        cols = np.where((gray[top:bottom] < 200).any(axis=0))[0]
+        band_h = bottom - top
+        # Recover the ink the profile threshold dropped above and below the
+        # core: matras, ascenders and the anusvara.
+        pad = max(PAD_Y, int(round(band_h * BAND_HEIGHT_PAD_RATIO)))
+        top_p = max(0, top - pad)
+        bottom_p = min(height, bottom + pad)
+        cols = np.where((gray[top_p:bottom_p] < 200).any(axis=0))[0]
         if len(cols) < MIN_INK_COLUMNS:
             continue
         left = max(0, int(cols.min()) - PAD_X)
         right = min(width, int(cols.max()) + PAD_X)
-        top_p = max(0, top - PAD_Y)
-        bottom_p = min(height, bottom + PAD_Y)
         crop = gray[top_p:bottom_p, left:right]
         if crop.size == 0:
             continue

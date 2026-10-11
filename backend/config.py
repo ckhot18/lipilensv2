@@ -37,7 +37,14 @@ COLAB_ENDPOINT_URL = os.getenv("COLAB_ENDPOINT_URL", "")
 
 # Transcribe one text line at a time instead of a whole page. Costs no GPU
 # (segmentation is OpenCV) and multiplies visual tokens per character.
-SEGMENT_LINES = os.getenv("SEGMENT_LINES", "1").strip().lower() not in (
+#
+# Default OFF, deliberately. Segmentation was introduced to raise the visual
+# token budget, but measured against expert references it made accuracy far
+# worse (mean CER 0.345 -> 0.794 on single-column pages) because the band
+# detector cuts ascenders and matras off each line and then feeds the model
+# anonymous slivers. Whole-page transcription is the configuration the accuracy
+# numbers in the README were measured with. Set SEGMENT_LINES=1 to re-enable.
+SEGMENT_LINES = os.getenv("SEGMENT_LINES", "0").strip().lower() not in (
     "0", "false", "no", "off"
 )
 # Pixel budget handed to the Qwen2.5-VL processor. 512*28*28 starves a full
@@ -45,6 +52,20 @@ SEGMENT_LINES = os.getenv("SEGMENT_LINES", "1").strip().lower() not in (
 # documented range for document OCR. Must match the value the Colab server
 # uses, or it will silently re-downscale the upscaled line crops.
 MAX_MODEL_PIXELS = int(os.getenv("MAX_MODEL_PIXELS", 1280 * 28 * 28))
+
+# --- Inference decoding knobs (read at call time so the eval harness can vary
+# --- them without reloading the model) -------------------------------
+# Greedy decoding on a 3B model falls into loops ("X Y X Y") when a line is
+# hard to read; 1.0 disables the guard. The published adapter lists
+# hallucination loops as a known failure mode.
+REPETITION_PENALTY = float(os.getenv("REPETITION_PENALTY", "1.05"))
+# Devanagari runs ~1 token per character, and MoDeTrans lines reach 254 tokens,
+# so the previous 256 cap had almost no headroom and would silently truncate.
+MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "512"))
+# max_pixels is a ceiling, not a target: a page already under the budget is
+# passed through untouched, so raising the budget alone buys nothing. Upscaling
+# the image first is what actually adds visual tokens per character. 1.0 = off.
+MODEL_UPSCALE = float(os.getenv("MODEL_UPSCALE", "1.0"))
 
 # Pinned revisions (verified via HF API 2026-09-17). Part of the transcription
 # cache key: a server-side model update must never serve stale cached text.

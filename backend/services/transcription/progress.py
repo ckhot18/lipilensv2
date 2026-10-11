@@ -202,7 +202,12 @@ class TranscriptionJob:
             return 0
         if self.stage in ("model_ready", "segmenting"):
             return MODEL_READY_PERCENT
-        if self.stage == "reading" and self.lines_total:
+        if self.stage == "reading":
+            if not self.lines_total:
+                # One indivisible unit of work: no honest denominator, so
+                # report the stage floor and let the UI show motion without a
+                # number it would have to invent.
+                return MODEL_READY_PERCENT
             floor = MODEL_READY_PERCENT
             return int(floor + STAGE_PERCENT["reading"] * self.lines_done
                        / self.lines_total)

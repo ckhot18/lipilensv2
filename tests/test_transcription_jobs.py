@@ -393,6 +393,35 @@ def test_progress_404s_for_an_unknown_manuscript(client):
     assert client.get("/api/manuscripts/9999/progress").status_code == 404
 
 
+def test_wrapped_service_does_not_announce_its_own_single_step():
+    """The wrapper emits per-line events and knows the line count.
+
+    If the wrapped bare service also announced an unmeasured single step it
+    would overwrite the denominator and the bar would lose its real progress.
+    """
+    from backend.services.transcription.inference import (
+        LineSegmentedTranscriptionService,
+    )
+    from backend.services.transcription.local_qwen import (
+        LocalQwenTranscriptionService,
+    )
+
+    inner = LocalQwenTranscriptionService()
+    assert inner.reports_own_progress is True
+    LineSegmentedTranscriptionService(inner)
+    assert inner.reports_own_progress is False
+
+
+def test_reading_with_no_line_count_reports_the_stage_floor():
+    """A whole-page read has no denominator: show motion, not a frozen bar."""
+    job = progress_mod.start_job(60)
+    job.apply({"stage": "reading", "lines_total": 0})
+    snap = job.snapshot()
+    assert snap["stage"] == "reading"
+    assert snap["percent"] == 15
+    assert snap["eta_s"] == 0.0
+
+
 def test_transcribe_still_409s_without_a_restored_image(client, monkeypatch):
     monkeypatch.setattr(manuscripts_route.pipeline_mod, "restore_only",
                         _raise_no_restore())

@@ -91,16 +91,23 @@ class PipelineOutput:
 # ---------------------------------------------------------------------------
 # Service reuse (one instance per mode per process)
 # ---------------------------------------------------------------------------
-_service_cache: dict[str, TranscriptionService] = {}
+_service_cache: dict[tuple[str, bool], TranscriptionService] = {}
 
 
 def _get_service() -> TranscriptionService:
+    """Return the cached service for the current inference settings.
+
+    Keyed by (mode, segment_lines): the wrapper is built from SEGMENT_LINES, so
+    a settings change must rebuild it. The underlying model stays loaded
+    either way — only the thin wrapper is new.
+    """
     from backend import config as app_config
 
     mode = app_config.INFERENCE_MODE.lower().strip()
-    if mode not in _service_cache:
-        _service_cache[mode] = get_transcription_service()
-    return _service_cache[mode]
+    key = (mode, bool(app_config.SEGMENT_LINES))
+    if key not in _service_cache:
+        _service_cache[key] = get_transcription_service()
+    return _service_cache[key]
 
 
 def clear_service_cache() -> None:
