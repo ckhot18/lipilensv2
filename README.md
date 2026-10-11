@@ -4,11 +4,17 @@ AI-assisted transcription pipeline for historical Modi-script manuscripts,
 with an embedded empirical study on how image restoration affects
 vision-language transcription accuracy.
 
+**Full write-up with screenshots and charts: [`docs/team_brief/TEAM_BRIEF_REPORT.md`](docs/team_brief/TEAM_BRIEF_REPORT.md)**
+
 ```
-photo -> restore -> segment -> transcribe -> verify -> archive -> search
-        (OpenCV)   (OpenCV)   (Qwen2.5-VL-3B  (human,       (SQLite)
-                                + Modi LoRA)    explicit)
+photo -> restore -> transcribe -> verify -> archive -> search
+        (OpenCV)   (Qwen2.5-VL-3B  (human,       (SQLite)
+                     + Modi LoRA)    explicit)
 ```
+
+Line segmentation exists (`SEGMENT_LINES=1`) but is **off by default**: it was
+added to raise the visual-token budget and measured worse (CER 0.363 -> 0.623).
+See Measured results below.
 
 ## Problem
 

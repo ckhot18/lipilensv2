@@ -54,6 +54,8 @@ Thumbs.db
 # Working docs stay local — only the public README ships in the repo
 *.md
 !README.md
+# ...except the team brief, which is a deliverable the whole team reads.
+!docs/team_brief/*.md
 
 # Office lock files (auto-created when a doc is open, auto-deleted on close)
 ~$*
