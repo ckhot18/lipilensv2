@@ -7,7 +7,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from experiments.evaluation.compute_metrics import cer, wer, edit_breakdown
+from experiments.evaluation.compute_metrics import (cer, wer, edit_breakdown,
+                                                   split_hypothesis)
 
 
 def test_cer_hand_computed():
@@ -25,6 +26,40 @@ def test_wer_hand_computed():
 def test_edit_breakdown_counts():
     bd = edit_breakdown("abc", "adc")
     assert bd == {"S": 1, "D": 0, "I": 0, "N": 3}
+
+
+def test_split_hypothesis_finds_the_page_boundary():
+    top, bottom = split_hypothesis("abc def ghi", "abc def", "ghi")
+    assert bottom.strip() == "ghi"
+    assert top.startswith("abc def")
+    # Rejoining recovers the original: the split loses nothing.
+    assert top + bottom == "abc def ghi"
+
+
+def test_split_hypothesis_handles_noise_at_the_boundary():
+    # Garbage where the page break is must not stop the split finding the seam.
+    top, bottom = split_hypothesis("abcXXXdef", "abc", "def")
+    assert bottom == "def"
+    assert top + bottom == "abcXXXdef"
+
+
+def test_split_hypothesis_keeps_everything_when_model_stops_early():
+    hyp = "abc def"
+    top, bottom = split_hypothesis(hyp, "abc def", "zzz qqq")
+    assert bottom == ""
+    assert top == hyp
+
+
+def test_split_hypothesis_on_empty_input():
+    assert split_hypothesis("", "abc", "def") == ("", "")
+
+
+def test_split_hypothesis_rejects_multi_char_separator():
+    try:
+        split_hypothesis("abc", "abc", "def", separator="||")
+    except ValueError:
+        return
+    raise AssertionError("a multi-character separator must be rejected")
 
 
 def test_exp002_metrics_json_is_consistent():

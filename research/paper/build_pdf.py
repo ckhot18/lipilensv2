@@ -26,7 +26,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics.shapes import Circle, Drawing, Line, String
+from reportlab.graphics.shapes import Circle, Drawing, Line, Rect, String
 from reportlab.platypus import (BaseDocTemplate, Frame, KeepTogether,
                                 PageTemplate, Paragraph, Preformatted,
                                 Spacer, Table, TableStyle)
@@ -437,6 +437,51 @@ def fig_levers() -> Drawing:
     return d
 
 
+def fig_context() -> Drawing:
+    """Adding a page is free; destroying a page's structure is not."""
+    ctx = list(csv.DictReader((EVAL / "eval_CTX_metrics.csv").open(encoding="utf-8")))
+    seg = list(csv.DictReader((EVAL / "eval_SEG20_metrics.csv").open(encoding="utf-8")))
+
+    bot = [float(r["cer_bottom"]) for r in ctx
+           if r["arm"] == "pair_top" and r["cer_bottom"] not in ("", None)]
+    bars = [
+        ("whole page", _mean_cer(ctx, "single") or 0, ACCENT),
+        ("whole page + neighbour (top)", _mean_cer(ctx, "pair_top") or 0, ACCENT),
+        ("the neighbour, read second", statistics.mean(bot) if bot else 0, ACCENT),
+        ("page split into line slivers", _mean_cer(seg, "seg") or 0, BAD),
+    ]
+
+    d = Drawing(500, 225)
+    L, T, mx = 150, 150, 0.70
+    for i, (lbl, val, col) in enumerate(bars):
+        y = T + 8 - i * 26
+        w = 200 * val / mx
+        d.add(String(L - 8, y + 5, lbl, fontName="Helvetica", fontSize=6.2,
+                     fillColor=INK, textAnchor="end"))
+        d.add(Rect(L, y - 3, w, 13, fillColor=col))
+        d.add(String(L + w + 6, y + 5, "%.3f" % val, fontName="Helvetica-Bold",
+                     fontSize=7, fillColor=col))
+
+    for i, ln in enumerate([
+            "Paired deltas vs the whole page:",
+            "",
+            "  neighbour present        -0.001",
+            "    worse 10 / better 9 / tie 1",
+            "",
+            "  same page read second    +0.015",
+            "    95% CI [-0.021, +0.052], p = 0.65",
+            "",
+            "  line segmentation        +0.290",
+            "    worse 19 / tie 1, p = 3.8e-06",
+            "",
+            "Cross-page context is nearly worthless and",
+            "nearly free. Within-page structure is neither."]):
+        c = BAD if ln.strip().startswith("line segmentation") else MUTED
+        fn = "Helvetica-Bold" if ln.strip().startswith("line segmentation") else "Helvetica"
+        d.add(String(372, 152 - i * 11, ln, fontName=fn, fontSize=6.0, fillColor=c))
+    return d
+
+
 FIGURES = {
     "fig2-segmentation.svg": (
         fig_segmentation,
@@ -468,6 +513,14 @@ FIGURES = {
         "merging the LoRA into the NF4-quantised base is catastrophic (CER 1.064, "
         "worse on 20/20 pages). Nothing outside the input representation moved "
         "accuracy."),
+    "fig7-context.svg": (
+        fig_context,
+        "Figure 6. Context versus structure. Adding a complete second page at "
+        "full native resolution changes the first page's CER by -0.001 (worse on "
+        "10, better on 9, tied on 1), and the same page read second costs +0.015 "
+        "(p = 0.65). Splitting a page into line slivers costs +0.290 (p = 3.8e-06). "
+        "Cross-page context is nearly worthless and nearly free; the page's "
+        "internal spatial structure is load-bearing."),
 }
 
 

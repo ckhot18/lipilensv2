@@ -379,6 +379,72 @@ def fig_levers():
     finish(p, "fig6-levers.svg")
 
 
+# ---------------------------------------------------------------- fig 7
+def fig_context():
+    """The reframe: adding a page is free, destroying structure is not."""
+    ctx = list(csv.DictReader((EVAL / "eval_CTX_metrics.csv").open(encoding="utf-8")))
+    seg = list(csv.DictReader((EVAL / "eval_SEG20_metrics.csv").open(encoding="utf-8")))
+
+    def mean_cer(rows, arm):
+        v = [float(r["cer"]) for r in rows if r["arm"] == arm]
+        return sum(v) / len(v) if v else None
+
+    bot = [float(r["cer_bottom"]) for r in ctx
+           if r["arm"] == "pair_top" and r["cer_bottom"] not in ("", None)]
+
+    bars = [
+        ("whole page", mean_cer(ctx, "single"), ACCENT),
+        ("whole page + its neighbour (top)", mean_cer(ctx, "pair_top"), ACCENT),
+        ("the neighbour, read second", statistics.mean(bot) if bot else None, ACCENT),
+        ("page split into line slivers", mean_cer(seg, "seg"), BAD),
+    ]
+
+    W, H = 980, 430
+    L, T, PW = 220, 132, 520
+    mx = 0.70
+    p = [head(W, H, "Adding a page is free. Destroying a page's structure is not.",
+              "Paired, n=20, every bar at full native resolution. "
+              "Only the second bar's input contains an extra page.")]
+
+    slot = PW / len(bars)
+    for i, (lbl, val, col) in enumerate(bars):
+        if val is None:
+            continue
+        y = T + 10 + i * 46
+        w = 300 * val / mx
+        p.append(f'<text x="{L-14}" y="{y+15}" fill="{INK}" font-size="12" '
+                 f'text-anchor="end">{esc(lbl)}</text>')
+        p.append(f'<rect x="{L}" y="{y}" width="{w:.1f}" height="22" fill="{col}" rx="3"/>')
+        p.append(f'<text x="{L+w+9:.1f}" y="{y+16}" fill="{col}" font-size="12.5" '
+                 f'font-weight="700">{val:.3f}</text>')
+    p.append(f'<line x1="{L}" y1="{T}" x2="{L}" y2="{T+10+len(bars)*46}" stroke="{GRID}"/>')
+
+    bx = L + 380
+    for i, ln in enumerate([
+            "Paired deltas vs the whole page:",
+            "",
+            "  neighbour present    -0.001",
+            "    worse 10 / better 9 / tie 1",
+            "",
+            "  same page, read second  +0.015",
+            "    95% CI [-0.021, +0.052], p = 0.65",
+            "",
+            "  line segmentation      +0.290",
+            "    worse 19 / tie 1, p = 3.8e-06",
+            "",
+            "Cross-page context is nearly worthless",
+            "and nearly free. Within-page structure",
+            "is neither."]):
+        c = BAD if "segmentation" in ln else MUTED
+        w = "700" if "segmentation" in ln else "400"
+        p.append(f'<text x="{bx}" y="{T+16+i*17}" fill="{c}" font-size="11.2" '
+                 f'font-weight="{w}">{esc(ln)}</text>')
+
+    p.append(f'<text x="40" y="{H-24}" fill="{MUTED}" font-size="11.5">'
+             f'Character error rate, mean of 20 pages. Lower is better.</text>')
+    finish(p, "fig7-context.svg")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     fig_baseline()
@@ -387,6 +453,7 @@ def main():
     fig_example()
     fig_tokens()
     fig_levers()
+    fig_context()
 
 
 if __name__ == "__main__":

@@ -144,7 +144,7 @@ def normalise(text: str) -> str:
 
 
 def run_arm(arm_name: str, arm: dict, pages: list[tuple[str, Path]],
-            tag: str) -> None:
+            tag: str, prompt: str | None = None) -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     WORK_DIR.mkdir(parents=True, exist_ok=True)
     apply_arm(arm)
@@ -158,9 +158,16 @@ def run_arm(arm_name: str, arm: dict, pages: list[tuple[str, Path]],
             continue
         t0 = time.perf_counter()
         try:
+            kwargs = {}
+            if prompt:
+                # A paired context probe needs both arms to carry the SAME
+                # instruction, otherwise a difference could come from the
+                # wording rather than from the image.
+                kwargs["prompt"] = prompt
             out = pipeline_mod.run_full_pipeline(
                 img_path, arm["config"],
-                output_dir=WORK_DIR / f"{tag}_{arm_name}_{page}")
+                output_dir=WORK_DIR / f"{tag}_{arm_name}_{page}",
+                **kwargs)
             hyp_path.write_text(out.transcription, encoding="utf-8")
             dt = time.perf_counter() - t0
             # Timing is the point of the inference-lever sweep, and the arm may
@@ -303,9 +310,28 @@ def main() -> None:
     ap.add_argument("--pages", type=int, default=10,
                     help="use the first N pages that have references")
     ap.add_argument("--tag", default="EVAL-01")
+    ap.add_argument("--prompt", default=None,
+                    help="override the transcription prompt for BOTH arms of a "
+                         "paired comparison; must be identical across arms or "
+                         "the comparison measures the wording, not the image")
+    ap.add_argument("--prompt-file", default=None,
+                    help="read the prompt from a file. Preferred over --prompt "
+                         "because a multi-word prompt is mangled by shell "
+                         "argument splitting")
+    ap.add_argument("--max-pixels", type=int, default=None,
+                    help="override MAX_MODEL_PIXELS for every arm. Raise it "
+                         "when an arm feeds a larger composite, otherwise the "
+                         "processor silently downsamples and the arm stops "
+                         "being the resolution it claims to be")
     ap.add_argument("--report", action="store_true",
                     help="re-score saved hypotheses without using the GPU")
     args = ap.parse_args()
+
+    if args.prompt and args.prompt_file:
+        print("give --prompt or --prompt-file, not both")
+        sys.exit(1)
+    if args.prompt_file:
+        args.prompt = Path(args.prompt_file).read_text(encoding="utf-8").strip()
 
     images_dir = Path(args.images) if args.images else IMAGE_DIR
     if not images_dir.is_absolute():
@@ -340,12 +366,17 @@ def main() -> None:
     if unknown:
         print(f"unknown arms: {unknown}; choose from {list(arms)}")
         sys.exit(1)
+    if args.max_pixels:
+        for name in names:
+            arms[name]["max_pixels"] = int(args.max_pixels)
 
     print(f"images: {images_dir}")
     print(f"pages:  {pages[0][0]}..{pages[-1][0]} ({len(pages)})")
+    if args.prompt:
+        print(f"prompt: {args.prompt[:90]}...")
     if not args.report:
         for arm_name in names:
-            run_arm(arm_name, arms[arm_name], pages, args.tag)
+            run_arm(arm_name, arms[arm_name], pages, args.tag, args.prompt)
     report(args.tag, pages, names)
 
 

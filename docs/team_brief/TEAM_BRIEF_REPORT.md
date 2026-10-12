@@ -66,9 +66,31 @@ Deck outline and speaker notes: **[PRESENTATION.md](PRESENTATION.md)**
 
 `max_pixels` is a **ceiling, not a target**. The 2048 arm is byte-identical to
 1280 on 20/20 pages because the page is already under both. Line segmentation
-supplies ~6.6× more tokens per character and scores **0.290 CER worse** — the
-tokens it buys are more than cancelled by the page context it discards.
+supplies ~6.6× more tokens per character and scores **0.290 CER worse**.
 **Keep `SEGMENT_LINES=0`.**
+
+## 1.3a Context vs structure (`CTX`, n=20) — this corrects our own explanation
+
+Page P at **full native resolution in every arm**, same prompt, same pixel
+ceiling; only the presence of P's neighbour varies.
+
+| Arm | mean CER | accuracy |
+|---|---|---|
+| P alone | 0.325 | 67.5% |
+| P above its neighbour (top page) | 0.324 | 67.6% |
+| the neighbour, read second | 0.351 | 64.9% |
+| P split into line slivers | 0.606 | 39.4% |
+
+Paired deltas: neighbour present **−0.001** (worse 10 / better 9 / tie 1); same
+page read second **+0.015** (95% CI [−0.021, +0.052], p = 0.65); segmentation
+**+0.290** (p = 3.8 × 10⁻⁶).
+
+**Adding a whole extra page is free. Cropping one page is catastrophic.** So the
+reason to keep the page whole is *not* that cross-page context is valuable —
+that context is nearly worthless **and** nearly free. What is load-bearing is the
+page's internal geometry: the relationship between a line's baseline, its
+ascenders and the matras below it. Side benefit: two full pages fit in one call
+on a 4 GB card at no accuracy cost.
 
 ## 1.4 Three facts to have ready cold
 
@@ -94,6 +116,7 @@ tokens it buys are more than cancelled by the page context it discards.
 |---|---|---|
 | "63.7% character accuracy, measured on 10 pages against expert references" | "90% accurate" | Never measured. Model ceiling is ~0.33 CER. |
 | "Segmentation measured 0.363 → 0.623, so we turned it off" | "Segmentation improves accuracy by giving the model more tokens per character" | **Disproven by our own experiment.** It gives 6.6× the tokens and is far worse. |
+| "Adding a second whole page costs nothing (−0.001); cropping one page costs +0.290" | "Context is valuable, which is why we keep the page whole" | Right instruction, wrong reason. Cross-page context is worthless *and* free. |
 | "No configuration beat the untouched capture on damaged input (n=23, all p>0.13)" | "Preprocessing helps on dirty scans (+2.3)" | **Our own n=10 claim. Reversed at n=23.** |
 | "The adapter's published mean is 0.328; we reach 0.363 on our sample" | "We outperform the adapter" | Different sample, within noise. |
 | "A reviewer corrects about one character in three" | "The system produces accurate transcriptions" | It produces a *draft*. |

@@ -1,0 +1,1 @@
+This image shows handwritten text in Modi script, a historical cursive script used to write the Marathi language. The image may contain one page or more than one page, stacked vertically and separated by a white gap. Transliterate ONLY the first (topmost) page shown into Devanagari script. Output only that page's Devanagari text, with no explanation.

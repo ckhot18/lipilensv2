@@ -35,10 +35,10 @@ Raw hypotheses are kept per experiment so any row can be re-scored.
 Run-to-run variance on 10 pages is about **±0.05 CER**, so treat differences
 smaller than that as noise. Runs: `EVAL-01` (clean pages, 50 model calls),
 `SEG20` (paired whole-page vs segmentation, 40 calls), `DEG-MED`
-(medium-severity captures, 92 calls at n=23), `PIXELS` (token-budget sweep, 60 calls),
-`LEVERS` (inference levers, 80 calls). The control arm of `LEVERS` reproduces
-the `PIXELS` arm byte-for-byte on 20/20 pages, which is how the sweep is
-validated.
+(medium-severity captures, 92 calls at n=23), `PIXELS` (token-budget sweep,
+60 calls), `LEVERS` (inference levers, 80 calls), `CTX` (context-vs-structure
+probe, 40 calls). The control arm of `LEVERS` reproduces the `PIXELS` arm
+byte-for-byte on 20/20 pages, which is how the sweep is validated.
 
 **1. The default configuration: whole page, `original`, no segmentation.**
 
@@ -100,16 +100,40 @@ shows sitting at ~3.9 GB of 4 GB during inference. Holding 75-80% accuracy
 *on average* is not reachable with a 3B model at this VRAM, and no
 preprocessing change moves it by more than a couple of points.
 
-**4. Tokens are not the constraint — page context is.** Sweeping the pixel
+**4. Tokens are not the constraint - they saturate at native resolution.**
+Sweeping the pixel
 budget on an unscaled page (`PIXELS`, n=20): 518 → 765 tokens/char improves CER
 0.344 → 0.316, but a budget of 2048 tokens/char produces output
 **byte-identical** to 1280 on 20/20 pages, because the page is already under
 both ceilings. `max_pixels` is a ceiling, not a target. Line segmentation
 supplies ~6.6× more tokens per character than the whole page and scores 0.290
-CER *worse* — the tokens it buys are more than cancelled by the page context it
-discards. Keep `SEGMENT_LINES=0`.
+CER *worse*. Keep `SEGMENT_LINES=0`. (Finding 5 shows why.)
 
-**5. Nothing outside the input pipeline helps.** Three standard levers, paired
+**5. Cross-page context is free; within-page structure is what breaks.** The
+obvious follow-up to finding 4: if tokens are capped, does *more page context*
+help? A controlled probe (`CTX`, n=20) gives the model page P at **full native
+resolution in every arm**, same prompt, same pixel ceiling, varying only whether
+P's neighbour is present:
+
+| Arm | mean CER | accuracy |
+|---|---|---|
+| P alone | 0.325 | 67.5% |
+| P above its neighbour (top page) | 0.324 | 67.6% |
+| the neighbour, read second | 0.351 | 64.9% |
+| P split into line slivers | 0.606 | 39.4% |
+
+Paired deltas: neighbour present **−0.001** (worse 10 / better 9 / tie 1); same
+page read second **+0.015** (95% CI [−0.021, +0.052], p = 0.65); segmentation
+**+0.290** (p = 3.8 × 10⁻⁶).
+
+So adding a whole extra page costs nothing, while cropping one page costs
+0.290 CER. **This corrects our own explanation**: the reason to keep the page
+whole is not that context is valuable — cross-page context is nearly worthless
+*and* nearly free. It is that the page's internal geometry (baseline to ascenders
+to matras) is load-bearing and 23:1 slivers delete it. A useful side effect:
+two full pages fit in one call on this 4 GB card at no accuracy cost.
+
+**6. Nothing outside the input pipeline helps.** Three standard levers, paired
 against a control running the shipped settings (`LEVERS`, n=20): beam search
 (+0.004 CER, 9 worse / 8 better, at **4.9× the latency**), fp16 (+0.010, no
 speed gain), and merging the LoRA into the NF4-quantised base, which is
@@ -118,7 +142,7 @@ documented behaviour, not a bug: PEFT's `merge_adapter()` dequantizes the base,
 adds the adapter, and re-quantizes, so a QLoRA adapter is merged into weights
 it was never fitted against. Do not enable `MERGE_LORA`.
 
-**6. Always score against a reference.** 8 of the 18 local transcriptions in
+**7. Always score against a reference.** 8 of the 18 local transcriptions in
 the archive had no ground truth and could not be scored at all. An unscored
 run is not a result.
 
@@ -222,12 +246,28 @@ python scripts/evaluate_local.py --report --configs original denoised enhanced b
 python scripts/evaluate_local.py --pixels px512 px1280 px2048 --pages 20 --tag PIXELS
 python scripts/evaluate_local.py --levers lever_base lever_beam4 lever_merge lever_fp16 \
     --pages 20 --tag LEVERS
+
+# context vs structure: same page at native resolution, alone vs stacked
+python scripts/make_context_probe.py --out data/raw/ctx_single --mode single --pages 20
+python scripts/make_context_probe.py --out data/raw/ctx_pair   --mode pair   --pages 20
+python scripts/evaluate_local.py --images data/raw/ctx_single --arm noseg --pages 20 \
+    --tag CTXSINGLE --max-pixels 1605632 --prompt-file experiments/prompts/context_probe.txt
+python scripts/evaluate_local.py --images data/raw/ctx_pair --arm noseg --pages 20 \
+    --tag CTXPAIR   --max-pixels 1605632 --prompt-file experiments/prompts/context_probe.txt
+python scripts/score_context_probe.py          # splits the stacked output, no GPU
 ```
 
 `--report` means report-only: it scores what is on disk and never calls the
 model. Omit it to actually run the missing pages. Run each `--levers` arm group
 in a fresh process if it spans more than two arms — repeated 85 s model reloads
 fragment a 4 GB card and the last arm can spill to CPU.
+
+`--prompt` is mangled by shell argument splitting when it contains spaces; use
+`--prompt-file`. Both arms of a paired comparison must carry the *identical*
+prompt, or the comparison measures the wording rather than the image.
+`--max-pixels` must be raised for any arm that feeds a larger composite, or the
+processor silently downsamples it and the arm stops being the resolution it
+claims to be.
 
 ## Configuration
 
@@ -236,13 +276,18 @@ fragment a 4 GB card and the last arm can spill to CPU.
 | `INFERENCE_MODE` | `local` | `local` (Qwen+LoRA on this machine) or `colab` |
 | `COLAB_ENDPOINT_URL` | - | Tunnel URL of the Colab inference server |
 | `SEGMENT_LINES` | `0` | Line-by-line transcription. **Measured harmful (CER 0.363 -> 0.623); off by default.** |
-| `MAX_MODEL_PIXELS` | `1280*28*28` | Processor pixel budget; **must match** the Colab server |
+| `MAX_MODEL_PIXELS` | `1280*28*28` | Processor pixel budget; **must match** the Colab server. A ceiling, not a target: pages under it are forwarded untouched. |
 | `REPETITION_PENALTY` | `1.05` | Greedy decoding loops on hard lines. `1.0` disables. |
 | `MAX_NEW_TOKENS` | `512` | Devanagari is ~1 token/char; lines reach 254 tokens |
 | `MODEL_UPSCALE` | `1.0` | Pre-upscale before the model. **Measured harmful at 1.5.** |
+| `NUM_BEAMS` | `1` | Greedy. `4` measured as noise at 4.9x the latency. |
+| `COMPUTE_DTYPE` | `bfloat16` | 4-bit compute dtype. `float16` measured as noise. |
+| `MERGE_LORA` | `0` | **Never enable. Measured catastrophic: CER 0.316 -> 1.064, worse on 20/20 pages.** PEFT re-quantizes the NF4 base on merge, so a QLoRA adapter is folded into weights it was never fitted against. Kept only so the experiment is reproducible. |
 
-Only `original` and `enhanced` are worth shipping in the UI. `binarized` and
-`full_restoration` measured worse in every condition tested.
+Only `original` and `enhanced` are reachable in the UI. `binarized` and
+`full_restoration` measured worse in every condition tested. Note that
+`enhanced` is *also* the weakest preprocessing choice on damaged input
+(finding 2), so `original` is the default for clean and dirty captures alike.
 
 ## Repository layout
 

@@ -463,6 +463,30 @@ segments it produces are not text lines."*
 
 ---
 
+## Slide 21b — Then we tested our own explanation, and it was wrong
+
+**Asset:** `fig7-context.svg`
+
+**On slide**
+| Intervention | ΔCER |
+|---|---|
+| Add a whole extra page of context | **−0.001** (worse 10 / better 9 / tie 1) |
+| Remove the page's internal line structure | **+0.290** (worse 19 / tie 1, p = 3.8 × 10⁻⁶) |
+
+Every bar at **full native resolution**; identical prompt; only the presence of
+a neighbouring page varies. The model reads two complete pages in one call on a
+4 GB card.
+
+**Say:** *"We'd been saying 'keep the page whole because context is valuable'.
+Then we tested it. Adding a second whole page changes nothing — not one page out
+of twenty moved. Context is worthless here *and* free. So the real reason to
+keep the page whole is its internal geometry: the relationship between a line's
+baseline, its ascenders, and the matras hanging below it. Cropping to 23:1
+slivers deletes exactly that, and neither more tokens nor more pages can put it
+back. Same instruction, wrong reason, until we measured it."*
+
+---
+
 ## Slide 22 — Preprocessing on degraded input
 
 **Asset:** `chart-degraded.svg` (or `chart-clean-vs-dirty.svg`)
@@ -529,18 +553,25 @@ has 53 % of pages in the 0.20–0.40 CER band and only 21 % below 0.20. Holding
 
 **On slide**
 ```
+Measured and closed out
+  · beam search       +0.004 CER, 4.9x latency      no gain
+  · LoRA merge        CER 1.064, worse 20/20       destroys the model
+  · fp16              +0.010 CER                  no gain
+  · conditional preprocessing                    evidence AGAINST it (n=23)
+
 Short term (no new hardware)
-  · beam search, LoRA merge, bf16 vs fp16 — all one-line, none measured yet
-  · n = 50 evaluation so 2-point effects become statistically meaningful
-  · conditional preprocessing driven by a cheap image-quality measure
+  · n = 50 on degraded input so 1-point effects resolve
+  · crop *within* a page (overlapping half/three-quarter windows at native
+    resolution) to find where within-page structure actually breaks
+  · document-scale transcription — now justified, because two pages per call
+    measured free, not because extra context helps
 
 Medium term
   · larger model (7B+) on more VRAM — the only real path to better accuracy
-  · multi-page document ordering and de-skew across pages
   · named-entity highlighting for archival search
 
 Long term
-  · fine-tuning an adapter ourselves on MoDeTrans
+  · fine-tuning an adapter ourselves on MoDeTrans at native resolution
   · crowd-sourced verification across many readers
 ```
 
@@ -557,6 +588,10 @@ Long term
 • 63.7 % character accuracy turns unreadable pages into searchable ones
 • Our strongest result is NEGATIVE and we stand behind it:
   the standard token-budget fix cost 26 accuracy points here
+• We then tested our own explanation and corrected it:
+  adding a whole page is free (-0.001), cropping one page costs +0.290.
+  Structure, not context, is what breaks
+• We retracted two of our own claims when measurement contradicted them
 • The evaluation harness makes every claim in this deck reproducible
 ```
 
