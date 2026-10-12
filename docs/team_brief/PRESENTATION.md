@@ -615,13 +615,26 @@ page into a searchable record. That is a useful product, stated honestly."*
 **Fallback if the GPU stalls:** `04-progress-reading.png` (a real captured
 in-flight run) and `05-result.png` (a real 54.3 s run).
 
-**Rehearse the cold start.** The first transcription after a server restart
-loads the model onto the GPU and takes **~85 s before any output appears**.
-Presented cold, that reads as a hang. Before you go up, run one throwaway
-transcription so the model is already resident; the demo then starts reading in
-~15 s and the progress bar moves immediately. This was verified end-to-end with
-`python scripts/demo_smoke_test.py`, which exercises this exact path against the
-running server and prints the stages it observed.
+**Rehearsed timings** (measured on this machine with
+`python scripts/demo_smoke_test.py`, not estimated):
+
+| Phase | Time |
+|---|---|
+| Restoration preview (CPU only) | 55–250 ms |
+| Upload + restore, no model | 0.1–0.2 s |
+| First transcription after a **cold** server | **50.7 s** (incl. model load) |
+| Transcription with the model **warm** | **18.5 s** |
+
+**Warm the model before you present.** The first transcription pays a one-off
+~32 s model load before any text appears. That is tolerable, but presented cold
+it is a long silence with nothing moving. Run one throwaway page first so the
+demo starts reading in ~18 s and the progress bar moves immediately.
+
+**Do not rehearse on a page that is already in the archive.** Uploading an
+image the archive already holds is idempotent — the API returns the stored
+record and never runs the model, so the run finishes in 0.0 s and demonstrates
+nothing. `demo_smoke_test.py` now fails loudly on exactly that case; if it does,
+pick a different page.
 
 ---
 
