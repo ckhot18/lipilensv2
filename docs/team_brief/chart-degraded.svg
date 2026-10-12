@@ -1,23 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="980" height="448" viewBox="0 0 980 448" font-family="Inter,Segoe UI,system-ui,sans-serif">
 <rect width="980" height="448" fill="#0a0a0c"/>
 <text x="34" y="46" fill="#f4f4f6" font-size="21" font-weight="700">Character Error Rate by configuration</text>
-<text x="34" y="72" fill="#91919b" font-size="13">10 same pages re-photographed at medium severity: aged paper, uneven light, stains, skew, JPEG - 40 real model calls (DEG-MED)</text>
+<text x="34" y="72" fill="#91919b" font-size="13">23 same pages re-photographed at medium severity: aged paper, uneven light, stains, skew, JPEG - 92 real model calls (DEG-MED)</text>
 <text x="194" y="130" fill="#f4f4f6" font-size="14" text-anchor="end">original</text>
 <rect x="210" y="110" width="560" height="26" rx="6" fill="#141417"/>
-<rect x="210" y="110" width="223" height="26" rx="6" fill="#8b85ff"/>
-<text x="447.3392" y="129" fill="#f4f4f6" font-size="14" font-weight="600">0.399  (60.1% correct)</text>
+<rect x="210" y="110" width="195" height="26" rx="6" fill="#8b85ff"/>
+<text x="418.69739130434783" y="129" fill="#f4f4f6" font-size="14" font-weight="600">0.348  (65.2% correct)</text>
 <text x="194" y="192" fill="#f4f4f6" font-size="14" text-anchor="end">denoised</text>
 <rect x="210" y="172" width="560" height="26" rx="6" fill="#141417"/>
-<rect x="210" y="172" width="212" height="26" rx="6" fill="#e8a33d"/>
-<text x="435.54" y="191" fill="#f4f4f6" font-size="14" font-weight="600">0.378  (62.2% correct)</text>
+<rect x="210" y="172" width="187" height="26" rx="6" fill="#e8a33d"/>
+<text x="410.9888695652174" y="191" fill="#f4f4f6" font-size="14" font-weight="600">0.334  (66.6% correct)</text>
 <text x="194" y="254" fill="#f4f4f6" font-size="14" text-anchor="end">enhanced</text>
 <rect x="210" y="234" width="560" height="26" rx="6" fill="#141417"/>
-<rect x="210" y="234" width="211" height="26" rx="6" fill="#e8a33d"/>
-<text x="434.5152" y="253" fill="#f4f4f6" font-size="14" font-weight="600">0.376  (62.4% correct)</text>
+<rect x="210" y="234" width="282" height="26" rx="6" fill="#e8a33d"/>
+<text x="506.016" y="253" fill="#f4f4f6" font-size="14" font-weight="600">0.504  (49.6% correct)</text>
 <text x="194" y="316" fill="#f4f4f6" font-size="14" text-anchor="end">binarized</text>
 <rect x="210" y="296" width="560" height="26" rx="6" fill="#141417"/>
-<rect x="210" y="296" width="243" height="26" rx="6" fill="#ef7a6d"/>
-<text x="466.6368" y="315" fill="#f4f4f6" font-size="14" font-weight="600">0.433  (56.7% correct)</text>
+<rect x="210" y="296" width="246" height="26" rx="6" fill="#ef7a6d"/>
+<text x="470.1467826086956" y="315" fill="#f4f4f6" font-size="14" font-weight="600">0.440  (56.0% correct)</text>
 <line x1="210.0" y1="98" x2="210.0" y2="358" stroke="#26262c" stroke-width="1"/>
 <text x="210.0" y="378" fill="#6e6e78" font-size="11" text-anchor="middle">0%</text>
 <line x1="350.0" y1="98" x2="350.0" y2="358" stroke="#26262c" stroke-width="1"/>

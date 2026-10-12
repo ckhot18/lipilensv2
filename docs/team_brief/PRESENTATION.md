@@ -468,16 +468,21 @@ segments it produces are not text lines."*
 **Asset:** `chart-degraded.svg` (or `chart-clean-vs-dirty.svg`)
 
 **On slide**
-| Config | Clean scan | Degraded capture |
+| Config | Clean scan | Degraded capture (n=23) |
 |---|---|---|
-| `original` | **63.7 %** | 60.1 % |
-| `enhanced` | 63.3 % | **62.4 %** |
-| `binarized` | — | **56.7 %** |
+| `original` | **63.7 %** | **65.2 %** |
+| `denoised` | — | 66.6 % *(p=0.68, not significant)* |
+| `binarized` | — | 56.0 % |
+| `enhanced` | 63.3 % | **49.6 %** |
 
 **Say:** *"Our corpus was already deskewed and clean, so preprocessing had no
-job — only ink to destroy. We built a degradation ladder on authentic pages.
-Cleaning is worth about two points on a degraded scan. The product premise is
-right; the effect is small. Binarisation loses everywhere."*
+job — only ink to destroy. We built a degradation ladder on authentic pages and
+expected cleaning to help on damaged input. At ten pages it looked like a
+two-point gain. At twenty-three it reversed: `enhanced` became the *worst*
+config, losing fifteen points, and nothing beat leaving the image alone. The
+ten pages we started with still favour it — the reversal lives entirely in the
+pages we added. That's not a bug in our harness; it's the harness working. And
+it means we retracted a claim that was already in our own documentation."*
 
 ---
 ---
@@ -628,8 +633,11 @@ page searchable and a reviewer's correction is stored permanently beside it.
 Verification is the design, not a workaround.
 
 **"If preprocessing doesn't help, why is it in the pipeline?"**
-Because the premise is dirty input. Worth ~2 points on degraded captures,
-neutral on clean scans. We default to `original` and offer the rest.
+The premise is dirty input, so we built the ladder to test it rather than assume
+it. The answer is that nothing beats leaving the image alone — at n=23 every
+config is within noise of `original` and `enhanced` is actively harmful. It
+stays because the premise is testable, not because it was confirmed. We default
+to `original` and it is what we recommend.
 
 **"How do you know your references are correct?"**
 MoDeTrans is a published corpus with expert transliterations from IIT Roorkee

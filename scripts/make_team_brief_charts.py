@@ -177,9 +177,9 @@ def main() -> None:
             d = deg[key]
             drows.append((label, d["cer"], colour,
                           f'{d["cer"]:.3f}  ({d["acc"]:.1f}% correct)'))
-    bar_chart(drows, note="10 same pages re-photographed at medium severity: "
+    bar_chart(drows, note="23 same pages re-photographed at medium severity: "
                           "aged paper, uneven light, stains, skew, JPEG - "
-                          "40 real model calls (DEG-MED)",
+                          "92 real model calls (DEG-MED)",
               filename="chart-degraded.svg")
 
     groups = ["original", "denoised", "enhanced", "binarized"]
@@ -188,7 +188,7 @@ def main() -> None:
         "degraded capture": {g: deg.get(f"c_{g}", {}).get("cer") for g in groups},
     }
     grouped_chart(groups, series, "chart-clean-vs-dirty.svg",
-                  "Preprocessing only pays on input that actually needs it")
+                  "Preprocessing does not pay, even on input that needs it")
 
     print("\nSummary written from live data:")
     for k, v in clean.items():

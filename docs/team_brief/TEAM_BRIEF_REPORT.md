@@ -21,7 +21,8 @@ Deck outline and speaker notes: **[PRESENTATION.md](PRESENTATION.md)**
 | Claim | Value | Source |
 |---|---|---|
 | Character accuracy, clean scans | **63.7%** (CER 0.363) | `eval_EVAL-01_metrics.csv`, 10 pages |
-| Character accuracy, degraded captures | **62.4%** (CER 0.376) | `eval_DEG-MED_metrics.csv`, 10 pages |
+| Character accuracy, degraded captures | **65.2%** (CER 0.348) | `eval_DEG-MED_metrics.csv`, **23 pages** |
+| Best degraded-input config (`denoised`) | 66.6% (CER 0.334) | n=23, sign test p=0.68 — **not significant** |
 | Adapter's published mean, 204 held-out pages | 67.2% (CER 0.328) | adapter model card |
 | Share of adapter examples below CER 0.20 | 21% | adapter model card |
 | Share in the 0.20–0.40 "fair" band | 53% | adapter model card |
@@ -31,7 +32,12 @@ Deck outline and speaker notes: **[PRESENTATION.md](PRESENTATION.md)**
 | Hardware | RTX 2050, **4 GB VRAM** | `nvidia-smi` |
 | VRAM in use during inference | ~3.9 GB of 4 GB | `nvidia-smi` |
 | Adapter's recommended VRAM | ≥6 GB (developed on 8.5 GB) | adapter model card |
-| Tests | 93 passing | `pytest tests/ -q` |
+| Tests | 99 passing | `pytest tests/ -q` |
+
+> **Retracted.** This brief previously reported *"`enhanced` on degraded input:
+> 62.4% (CER 0.376), small gain"* from a 10-page run. Replicated at **n=23**,
+> `enhanced` scores **49.6% (CER 0.504)** — the worst configuration tested. The
+> 10-page number was page selection, not configuration. See §1.4.
 
 ## 1.2 Configuration results
 
@@ -40,20 +46,40 @@ Deck outline and speaker notes: **[PRESENTATION.md](PRESENTATION.md)**
 | **Whole page + `original`** | **0.363** | **63.7%** | **shipped** |
 | + repetition guard + 512 tokens | 0.363 | 63.7% | no measurable effect |
 | `enhanced` on clean input | 0.367 | 63.3% | negligible loss |
-| `denoised` on degraded input | 0.378 | 62.2% | small gain |
-| **`enhanced` on degraded input** | **0.376** | **62.4%** | small gain |
-| `binarized`, any input | 0.433–0.433 | 56.7% | **loses everywhere** |
+| `original` on degraded input (n=23) | 0.348 | 65.2% | baseline |
+| `denoised` on degraded input (n=23) | 0.334 | 66.6% | +1.4 pts, **p=0.68, not significant** |
+| **`enhanced` on degraded input (n=23)** | **0.504** | **49.6%** | **harms badly** |
+| `binarized`, any input | 0.355–0.440 | 56.0–60.0% | **loses everywhere** |
 | 1.5× pre-upscale | 0.417 | 58.3% | **worse** |
-| Line segmentation | 0.623 | 37.7% | **much worse — now off** |
+| Line segmentation | 0.606 | 39.4% | **much worse — now off** (n=20 paired; the n=10 `EVAL-01` run gave 0.623/37.7%, which is what `chart-clean-arms.svg` plots — both runs agree on direction and magnitude) |
+| Beam search (4 beams) | 0.320 | 68.0% | noise, at **4.9× the latency** |
+| fp16 compute | 0.326 | 67.4% | noise, no speed gain |
+| LoRA merge | **1.064** | **−6.4%** | **destroys the model — never enable** |
 
-## 1.3 Three facts to have ready cold
+## 1.3 Token budget, measured (`PIXELS`, n=20)
+
+| Budget | Visual tokens/char | CER | Accuracy |
+|---|---|---|---|
+| 512 × 28² | 3.57 | 0.344 | 65.6% |
+| 1280 × 28² (shipped) | 5.28 | **0.316** | **68.4%** |
+| 2048 × 28² | 5.28 | 0.316 | 68.4% |
+
+`max_pixels` is a **ceiling, not a target**. The 2048 arm is byte-identical to
+1280 on 20/20 pages because the page is already under both. Line segmentation
+supplies ~6.6× more tokens per character and scores **0.290 CER worse** — the
+tokens it buys are more than cancelled by the page context it discards.
+**Keep `SEGMENT_LINES=0`.**
+
+## 1.4 Three facts to have ready cold
 
 1. **The accuracy regression.** Line segmentation was introduced as "the
    accuracy fix". Measured, it cost **0.363 → 0.623**. It is now off by default.
 2. **Two of our own predictions were wrong.** The 1.5× upscale (rated
    highest-value) measured worse. The repetition guard changed nothing.
-3. **The product thesis is directionally right but small.** Cleaning a degraded
-   scan buys ~2 points. It is not the transformation it sounds like.
+3. **The product thesis did not survive its own replication.** At n=10 a
+   degraded capture looked ~2 points better after cleaning. At n=23 it is
+   15.6 points *worse*, and nothing beat the untouched image. Cleaning is not a
+   small win; on this adapter it is a loss.
 
 ---
 
@@ -67,8 +93,8 @@ Deck outline and speaker notes: **[PRESENTATION.md](PRESENTATION.md)**
 | ✅ Say | ❌ Never say | Why |
 |---|---|---|
 | "63.7% character accuracy, measured on 10 pages against expert references" | "90% accurate" | Never measured. Model ceiling is ~0.33 CER. |
-| "Segmentation measured 0.363 → 0.623, so we turned it off" | "Segmentation improves accuracy by giving the model more tokens per character" | **Disproven by our own experiment.** |
-| "Preprocessing helps on dirty scans (+2.3) and is neutral on clean ones" | "Preprocessing cleans up the image so the model reads better" | Unqualified, this is false on clean input. |
+| "Segmentation measured 0.363 → 0.623, so we turned it off" | "Segmentation improves accuracy by giving the model more tokens per character" | **Disproven by our own experiment.** It gives 6.6× the tokens and is far worse. |
+| "No configuration beat the untouched capture on damaged input (n=23, all p>0.13)" | "Preprocessing helps on dirty scans (+2.3)" | **Our own n=10 claim. Reversed at n=23.** |
 | "The adapter's published mean is 0.328; we reach 0.363 on our sample" | "We outperform the adapter" | Different sample, within noise. |
 | "A reviewer corrects about one character in three" | "The system produces accurate transcriptions" | It produces a *draft*. |
 | "Differences under ±0.05 CER are noise" | "Preprocessing improved accuracy by 0.004" | Below noise floor. |
@@ -156,10 +182,15 @@ we had was already deskewed and contrast-normalised, so the restoration pipeline
 had no job — only ink to destroy.
 
 We generated a degradation ladder (`make_realistic.py`) that re-photographs
-authentic pages with authentic ground truth, and re-ran the comparison. On
-degraded captures, preprocessing is worth ~2 points; on clean captures it costs
-~0.4. **The thesis holds, but it is small** — and it is now measured rather than
-assumed.
+authentic pages with authentic ground truth, and re-ran the comparison. At n=10
+preprocessing looked worth ~2 points on damaged input. **At n=23 that reversed**:
+`enhanced` became the worst configuration tested (49.6% vs 65.2% for the
+untouched capture) and no configuration differed significantly from doing
+nothing. We retracted the claim. The interesting part is not that we were wrong
+but *how* — the same ten pages still favour `enhanced` (−0.023), so the
+reversal lives entirely in the thirteen pages the larger run added. That is the
+same page-selection artefact we had already documented for our own first n=10
+segmentation ablation, applied to a claim we had not yet re-tested.
 
 ## 3.5 What we shipped
 
@@ -252,14 +283,15 @@ Blocked          what we need from whom
 > LipiLens is a human-in-the-loop transliteration aid for historical
 > Modi-script manuscripts, using a 4-bit quantised Qwen2.5-VL-3B with a
 > domain LoRA on consumer hardware. We measure character error rate against
-> authentic expert references and report **63.7%** on clean scans and **62.4%**
+> authentic expert references and report **63.7%** on clean scans and **65.2%**
 > on simulated photographic degradation, against a published adapter baseline
 > of 0.328 CER. Our central negative finding is that line segmentation — widely
 > assumed to help vision-language transcription by raising the visual-token
 > budget — cost 26 accuracy points in our setting by fragmenting text lines and
 > discarding ascenders and matras. We also show that image preprocessing, which
-> is often assumed to help, is worth roughly two points and only on degraded
-> input. We release an evaluation harness so that claims about transcription
+> is often assumed to help, is not measurably helpful on either, and we report
+> the n=10 result we had to retract when n=23 reversed it. We release an
+> evaluation harness so that claims about transcription
 > quality are reproducible rather than anecdotal.
 
 ---
@@ -283,16 +315,20 @@ State these proactively. Each one has a reason, not just a fact.
 
 # PART 7 — WHAT WE HAVE NOT TRIED
 
-Each is a one-line change on inference. None has been measured.
+Each is a one-line change on inference.
 
-| Idea | Cost | Expectation |
+| Idea | Cost | Status |
 |---|---|---|
-| Beam search (`num_beams=4`) | ~2× wall clock, negligible VRAM | Standard OCR win; plausible small gain |
-| `merge_and_unload()` the LoRA | Free | Often slightly better and faster in 4-bit |
-| `prepare_model_for_kbit_training()` | Free | Documented PEFT prep we omitted |
-| fp16 vs bf16 compute dtype | Free | Consumer-card bf16 quirks exist on sm_86 |
-| Conditional preprocessing | ~1 day | Only worth it if n=50 confirms the +2 points |
+| Beam search (`num_beams=4`) | **4.9× wall clock** | **Measured: no gain.** +0.004 CER, 9 pages worse / 8 better. Noise. |
+| `merge_and_unload()` the LoRA | Free | **Measured: destroys the model.** CER 1.064, worse on 20/20 pages. PEFT re-quantizes the base on merge, so a QLoRA adapter is merged into weights it was never fitted against. **Never enable.** |
+| fp16 vs bf16 compute dtype | Free | **Measured: no gain.** +0.010 CER, no speed benefit. bf16 stands. |
+| Conditional preprocessing | ~1 day | **Measured against.** n=23 found no config beats `original` on damaged input. |
+| `prepare_model_for_kbit_training()` | Free | Not measured. It is a *training* prep; we only run inference. |
 | Larger model on more VRAM | Hardware | **The only real path to materially better accuracy** |
+
+All four inference levers are now measured (`LEVERS`, n=20, paired against a
+control that reproduced the token-sweep arm byte-for-byte). None helped. Only
+the input representation moved accuracy at all.
 
 **Before anyone spends GPU time on these:** log the result in
 `experiments/results/eval/` with a new tag and update this document. Do not
