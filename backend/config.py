@@ -67,6 +67,20 @@ MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "512"))
 # the image first is what actually adds visual tokens per character. 1.0 = off.
 MODEL_UPSCALE = float(os.getenv("MODEL_UPSCALE", "1.0"))
 
+# --- Inference levers, all read at call time (read before changing them) ---
+# Greedy is one option; beam search costs wall-clock, not much VRAM.
+NUM_BEAMS = int(os.getenv("NUM_BEAMS", "1"))
+# bfloat16 is supported on sm_80+; fp16 is a cheap A/B on consumer cards.
+COMPUTE_DTYPE = os.getenv("COMPUTE_DTYPE", "bfloat16").strip().lower()
+# Merging the adapter into the base avoids a separate LoRA matmul per layer.
+# DO NOT ENABLE THIS. Measured on 20 pages (LEVERS): CER 0.316 -> 1.064, worse
+# than emitting nothing, and worse on 20/20 pages. PEFT's merge_adapter()
+# dequantizes the base, adds the adapter and re-quantizes the sum, so a QLoRA
+# adapter ends up merged into weights it was never fitted against. Kept as a
+# knob only so the experiment is reproducible.
+MERGE_LORA = os.getenv("MERGE_LORA", "0").strip().lower() in (
+    "1", "true", "yes", "on")
+
 # Pinned revisions (verified via HF API 2026-09-17). Part of the transcription
 # cache key: a server-side model update must never serve stale cached text.
 BASE_MODEL_REVISION = os.getenv(

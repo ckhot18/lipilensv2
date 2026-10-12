@@ -22,6 +22,7 @@ costs one ~65 s load rather than one per page.
 
 import argparse
 import csv
+import json
 import re
 import statistics
 import sys
@@ -70,6 +71,24 @@ FIELDNAMES = ["arm", "page", "cer", "wer", "hyp_chars", "ref_chars",
 # (EVAL-01: repetition guard and token headroom were byte-identical to plain).
 FIXED_DECODE = dict(segment=False, rep=1.05, max_new=512, upscale=1.0)
 
+# Token-budget sweep. The whole page is 587k px, so a budget of 512*28*28
+# forces a downscale and anything above 1280*28*28 is a no-op. Running these
+# on an UNSCALED page separates "more visual tokens" from "distorted aspect
+# ratio", which is the mechanism the segmentation result points at.
+PIXEL_ARMS = {
+    "px512": dict(config="original", **FIXED_DECODE, max_pixels=512 * 28 * 28),
+    "px1280": dict(config="original", **FIXED_DECODE, max_pixels=1280 * 28 * 28),
+    "px2048": dict(config="original", **FIXED_DECODE, max_pixels=2048 * 28 * 28),
+}
+
+# Inference levers, none of which had been tested before.
+LEVER_ARMS = {
+    "lever_base": dict(config="original", **FIXED_DECODE),
+    "lever_beam4": dict(config="original", **FIXED_DECODE, num_beams=4),
+    "lever_merge": dict(config="original", **FIXED_DECODE, merge=True),
+    "lever_fp16": dict(config="original", **FIXED_DECODE, dtype="float16"),
+}
+
 
 def config_arm(config_name: str) -> dict:
     """An arm that varies only the restoration config."""
@@ -103,6 +122,18 @@ def apply_arm(arm: dict) -> None:
     app_config.REPETITION_PENALTY = float(arm["rep"])
     app_config.MAX_NEW_TOKENS = int(arm["max_new"])
     app_config.MODEL_UPSCALE = float(arm["upscale"])
+    app_config.MAX_MODEL_PIXELS = int(
+        arm.get("max_pixels", 1280 * 28 * 28))
+    app_config.NUM_BEAMS = int(arm.get("num_beams", 1))
+    app_config.COMPUTE_DTYPE = str(arm.get("dtype", "bfloat16"))
+    # Merging rewrites weights and dtype changes how they are dequantised, so
+    # an arm that differs in either needs its own load. Without this the arm
+    # silently inherits the previous arm's weights and reports nothing real.
+    app_config.MERGE_LORA = bool(arm.get("merge", False))
+    import backend.services.transcription.local_qwen as lq
+
+    if not lq.model_matches(app_config.COMPUTE_DTYPE, app_config.MERGE_LORA):
+        lq.invalidate_model()
     # The service is wrapped from SEGMENT_LINES, so rebuild the wrapper. The
     # 3B model itself stays loaded in local_qwen's module globals.
     pipeline_mod.clear_service_cache()
@@ -132,6 +163,13 @@ def run_arm(arm_name: str, arm: dict, pages: list[tuple[str, Path]],
                 output_dir=WORK_DIR / f"{tag}_{arm_name}_{page}")
             hyp_path.write_text(out.transcription, encoding="utf-8")
             dt = time.perf_counter() - t0
+            # Timing is the point of the inference-lever sweep, and the arm may
+            # be resumed days later, so it has to survive in the hypothesis
+            # itself rather than in this process's memory.
+            hyp_path.with_suffix(".meta.json").write_text(
+                json.dumps({"secs": round(dt, 3),
+                            "lines": int(getattr(out, "line_count", 0) or 0)}),
+                encoding="utf-8")
             print(f"  [{i}/{len(pages)}] {page} {dt:6.1f}s "
                   f"chars={len(out.transcription)}", flush=True)
         except Exception as exc:  # noqa: BLE001
@@ -170,6 +208,15 @@ def report(tag: str, pages: list[str], arms: list[str]) -> None:
             if not hyp.exists():
                 continue
             secs = 0.0
+            lines = 0
+            meta = hyp.with_suffix(".meta.json")
+            if meta.exists():
+                try:
+                    m = json.loads(meta.read_text(encoding="utf-8"))
+                    secs = float(m.get("secs") or 0.0)
+                    lines = int(m.get("lines") or 0)
+                except (ValueError, TypeError):
+                    pass
             try:
                 ref = normalise((REF_DIR / f"{page}_ref.txt")
                                 .read_text(encoding="utf-8"))
@@ -180,7 +227,7 @@ def report(tag: str, pages: list[str], arms: list[str]) -> None:
                     "cer": round(cer(h, ref), 4), "wer": round(wer(h, ref), 4),
                     "hyp_chars": len(h), "ref_chars": len(ref),
                     "S": eb["S"], "D": eb["D"], "I": eb["I"], "N": eb["N"],
-                    "secs": secs, "lines": 0, "error": "",
+                    "secs": secs, "lines": lines, "error": "",
                 })
             except Exception as exc:  # noqa: BLE001
                 print(f"  score failed for {arm_name}/{page}: {exc}")
@@ -246,6 +293,10 @@ def main() -> None:
     ap.add_argument("--configs", nargs="*", default=None,
                     help="sweep only the restoration config, holding decoding "
                          "fixed. arms are named c_<config>.")
+    ap.add_argument("--pixels", nargs="*", default=None,
+                    help="token-budget sweep, arms named px<k> (e.g. px512).")
+    ap.add_argument("--levers", nargs="*", default=None,
+                    help="inference-lever sweep, arms named lever_*.")
     ap.add_argument("--images", default=None,
                     help="image directory (default data/raw/mode_trans). Use "
                          "data/raw/realistic_<severity> for dirty captures.")
@@ -268,9 +319,17 @@ def main() -> None:
     if args.configs:
         for cfg in args.configs:
             arms[f"c_{cfg}"] = config_arm(cfg)
+    if args.pixels:
+        arms.update({k: v for k, v in PIXEL_ARMS.items() if k in args.pixels})
+    if args.levers:
+        arms.update({k: v for k, v in LEVER_ARMS.items() if k in args.levers})
 
     if args.all_arms:
         names = list(ARMS)
+    elif args.pixels:
+        names = list(args.pixels)
+    elif args.levers:
+        names = list(args.levers)
     elif args.configs:
         names = [f"c_{c}" for c in args.configs]
     elif args.arm:

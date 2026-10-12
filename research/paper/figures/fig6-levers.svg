@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="430" viewBox="0 0 980 430" font-family="Inter,Segoe UI,system-ui,sans-serif">
+<rect width="980" height="430" fill="#ffffff"/>
+<text x="40" y="44" fill="#1c1c1e" font-size="20" font-weight="700">Every lever outside the input pipeline fails</text>
+<text x="40" y="68" fill="#6e6e76" font-size="12.5">Paired against a control arm running the shipped settings, n=20. Control reproduced the §5.5 arm byte-for-byte.</text>
+<rect x="178.0" y="306.8" width="84" height="63.2" fill="#4f46e5" rx="3"/>
+<text x="220.0" y="314.8" fill="#4f46e5" font-size="12.5" font-weight="700" text-anchor="middle">0.316</text>
+<text x="220.0" y="396" fill="#1c1c1e" font-size="12" text-anchor="middle">shipped</text>
+<text x="220.0" y="414" fill="#8e8e96" font-size="10.5" text-anchor="middle">16s/page</text>
+<rect x="318.0" y="305.9" width="84" height="64.1" fill="#6e6e76" rx="3"/>
+<text x="360.0" y="313.9" fill="#6e6e76" font-size="12.5" font-weight="700" text-anchor="middle">0.320</text>
+<text x="360.0" y="396" fill="#1c1c1e" font-size="12" text-anchor="middle">beam = 4</text>
+<text x="360.0" y="414" fill="#8e8e96" font-size="10.5" text-anchor="middle">76s/page</text>
+<rect x="458.0" y="304.7" width="84" height="65.3" fill="#6e6e76" rx="3"/>
+<text x="500.0" y="312.7" fill="#6e6e76" font-size="12.5" font-weight="700" text-anchor="middle">0.326</text>
+<text x="500.0" y="396" fill="#1c1c1e" font-size="12" text-anchor="middle">fp16</text>
+<text x="500.0" y="414" fill="#8e8e96" font-size="10.5" text-anchor="middle">21s/page</text>
+<rect x="598.0" y="157.2" width="84" height="212.8" fill="#c0392b" rx="3"/>
+<text x="640.0" y="165.2" fill="#c0392b" font-size="12.5" font-weight="700" text-anchor="middle">1.064</text>
+<text x="640.0" y="396" fill="#1c1c1e" font-size="12" text-anchor="middle">merge LoRA</text>
+<text x="640.0" y="414" fill="#8e8e96" font-size="10.5" text-anchor="middle">19s/page</text>
+<line x1="150" y1="370" x2="710" y2="370" stroke="#e4e4e9"/>
+<text x="138" y="374" fill="#8e8e96" font-size="11" text-anchor="end">0</text>
+<text x="740" y="146" fill="#6e6e76" font-size="11.3" font-weight="400">Beam = 4:  +0.004 CER, 9 worse / 8 better</text>
+<text x="740" y="165" fill="#6e6e76" font-size="11.3" font-weight="400">— noise, at 4.9× the latency.</text>
+<text x="740" y="184" fill="#6e6e76" font-size="11.3" font-weight="400"></text>
+<text x="740" y="203" fill="#6e6e76" font-size="11.3" font-weight="400">fp16:  +0.010 CER, no speed benefit.</text>
+<text x="740" y="222" fill="#6e6e76" font-size="11.3" font-weight="400">bf16 stays.</text>
+<text x="740" y="241" fill="#6e6e76" font-size="11.3" font-weight="400"></text>
+<text x="740" y="260" fill="#c0392b" font-size="11.3" font-weight="700">Merge LoRA:  CER 1.064, worse on</text>
+<text x="740" y="279" fill="#6e6e76" font-size="11.3" font-weight="400">20/20 pages. Folding the delta into</text>
+<text x="740" y="298" fill="#6e6e76" font-size="11.3" font-weight="400">NF4-quantised base weights is not</text>
+<text x="740" y="317" fill="#6e6e76" font-size="11.3" font-weight="400">numerically sound — the adapter was</text>
+<text x="740" y="336" fill="#6e6e76" font-size="11.3" font-weight="400">fitted against a dequantised bf16 base.</text>
+<text x="40" y="406" fill="#6e6e76" font-size="11.5">Character error rate per page, mean of 20. Nothing outside the input representation moved accuracy.</text>
+</svg>

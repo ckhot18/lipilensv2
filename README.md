@@ -34,7 +34,11 @@ Raw hypotheses are kept per experiment so any row can be re-scored.
 
 Run-to-run variance on 10 pages is about **±0.05 CER**, so treat differences
 smaller than that as noise. Runs: `EVAL-01` (clean pages, 50 model calls),
-`DEG-MED` (medium-severity captures, 40 calls).
+`SEG20` (paired whole-page vs segmentation, 40 calls), `DEG-MED`
+(medium-severity captures, 40 calls), `PIXELS` (token-budget sweep, 60 calls),
+`LEVERS` (inference levers, 80 calls). The control arm of `LEVERS` reproduces
+the `PIXELS` arm byte-for-byte on 20/20 pages, which is how the sweep is
+validated.
 
 **1. The default configuration: whole page, `original`, no segmentation.**
 
@@ -87,7 +91,25 @@ shows sitting at ~3.9 GB of 4 GB during inference. Holding 75-80% accuracy
 *on average* is not reachable with a 3B model at this VRAM, and no
 preprocessing change moves it by more than a couple of points.
 
-**4. Always score against a reference.** 8 of the 18 local transcriptions in
+**4. Tokens are not the constraint — page context is.** Sweeping the pixel
+budget on an unscaled page (`PIXELS`, n=20): 518 → 765 tokens/char improves CER
+0.344 → 0.316, but a budget of 2048 tokens/char produces output
+**byte-identical** to 1280 on 20/20 pages, because the page is already under
+both ceilings. `max_pixels` is a ceiling, not a target. Line segmentation
+supplies ~6.6× more tokens per character than the whole page and scores 0.290
+CER *worse* — the tokens it buys are more than cancelled by the page context it
+discards. Keep `SEGMENT_LINES=0`.
+
+**5. Nothing outside the input pipeline helps.** Three standard levers, paired
+against a control running the shipped settings (`LEVERS`, n=20): beam search
+(+0.004 CER, 9 worse / 8 better, at **4.9× the latency**), fp16 (+0.010, no
+speed gain), and merging the LoRA into the NF4-quantised base, which is
+**catastrophic** — CER 1.064, worse on **20 of 20 pages**. The merge failure is
+documented behaviour, not a bug: PEFT's `merge_adapter()` dequantizes the base,
+adds the adapter, and re-quantizes, so a QLoRA adapter is merged into weights
+it was never fitted against. Do not enable `MERGE_LORA`.
+
+**6. Always score against a reference.** 8 of the 18 local transcriptions in
 the archive had no ground truth and could not be scored at all. An unscored
 run is not a result.
 
