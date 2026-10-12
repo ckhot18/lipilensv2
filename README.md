@@ -35,7 +35,7 @@ Raw hypotheses are kept per experiment so any row can be re-scored.
 Run-to-run variance on 10 pages is about **±0.05 CER**, so treat differences
 smaller than that as noise. Runs: `EVAL-01` (clean pages, 50 model calls),
 `SEG20` (paired whole-page vs segmentation, 40 calls), `DEG-MED`
-(medium-severity captures, 40 calls), `PIXELS` (token-budget sweep, 60 calls),
+(medium-severity captures, 92 calls at n=23), `PIXELS` (token-budget sweep, 60 calls),
 `LEVERS` (inference levers, 80 calls). The control arm of `LEVERS` reproduces
 the `PIXELS` arm byte-for-byte on 20/20 pages, which is how the sweep is
 validated.
@@ -66,22 +66,31 @@ plainly:
 - The repetition guard and the larger token cap changed **nothing** on clean
   pages (byte-identical output). They are harmless, not a win.
 
-**2. Preprocessing earns a little on dirty captures, and loses on clean ones.**
+**2. Preprocessing does not help even on dirty captures. (Corrected.)**
 
 `make_realistic.py` re-photographs authentic pages (paper tone, uneven
 lighting, foxing, skew, JPEG artefacts) with authentic ground truth. At medium
-severity, 10 pages:
+severity, **n=23** (92 calls):
 
-| Config | mean CER | accuracy | verdict |
-|---|---|---|---|
-| `original` | 0.399 | 60.1% | on dirty input the untouched capture is 2.3 pts worse |
-| `denoised` | 0.378 | 62.2% | small gain |
-| **`enhanced`** | **0.376** | **62.4%** | small gain, inside the noise band |
-| `binarized` | 0.433 | 56.7% | **HARMS**, confirmed on dirty input too |
+| Config | mean CER | accuracy | paired ΔCER | sign *p* | verdict |
+|---|---|---|---|---|---|
+| `original` | 0.348 | 65.2% | — | — | baseline on dirty input |
+| `denoised` | 0.334 | 66.6% | −0.014 | 0.68 | +1.4 pts, **not significant** |
+| `binarized` | 0.440 | 56.0% | +0.092 | 0.13 | **harms** |
+| **`enhanced`** | **0.504** | **49.6%** | **+0.156** | 0.52 | **harms badly** |
 
-So the product thesis is directionally right and small: cleaning helps a dirty
-scan by ~2 points and costs ~0.4 on a clean one. **Binarization loses
-everywhere** and should not be reachable from the default UI path.
+An earlier n=10 pass on this data suggested `enhanced` *gained* ~2 accuracy
+points, and this README said so. **That claim was wrong and is retracted.** The
+same 10 pages still favour it (−0.023); across all 23 it is strongly adverse
+(+0.156). The n=10 number measured page selection, not configuration — exactly
+the failure mode documented in finding 1, which we had not applied to our own
+result before publishing it.
+
+`enhanced` drives deletions from 16.5% to **37.8%**, the same failure signature
+segmentation produces. Contrast and gamma operations on a faded capture suppress
+the faint strokes carrying matras and the anusvāra. **Keep `original` as the
+default for dirty input too; binarization must not be reachable from the
+default UI path.**
 
 **3. The ceiling is the model, not the pipeline.** The published adapter
 reports CER **0.328** over 204 held-out pages, with only 21% of examples below
@@ -204,11 +213,21 @@ process loading the same 3B model exhausts the 4 GB card and kills the CUDA
 context mid-run. Stop the server before any offline evaluation:
 
 ```bash
-python scripts/evaluate_local.py --configs original denoised enhanced \
-    --images data/raw/realistic_medium --pages 10 --tag DEG-MED
-python scripts/evaluate_local.py --report --configs original denoised enhanced \
-    --images data/raw/realistic_medium --tag DEG-MED      # re-score, no GPU
+python scripts/evaluate_local.py --configs original denoised enhanced binarized \
+    --images data/raw/realistic_medium --pages 23 --tag DEG-MED
+python scripts/evaluate_local.py --report --configs original denoised enhanced binarized \
+    --images data/raw/realistic_medium --pages 23 --tag DEG-MED   # re-score, no GPU
+
+# token budget and inference levers
+python scripts/evaluate_local.py --pixels px512 px1280 px2048 --pages 20 --tag PIXELS
+python scripts/evaluate_local.py --levers lever_base lever_beam4 lever_merge lever_fp16 \
+    --pages 20 --tag LEVERS
 ```
+
+`--report` means report-only: it scores what is on disk and never calls the
+model. Omit it to actually run the missing pages. Run each `--levers` arm group
+in a fresh process if it spans more than two arms — repeated 85 s model reloads
+fragment a 4 GB card and the last arm can spill to CPU.
 
 ## Configuration
 
