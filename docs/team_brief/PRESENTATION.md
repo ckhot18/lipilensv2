@@ -606,7 +606,7 @@ page into a searchable record. That is a useful product, stated honestly."*
 
 **Demo script**
 1. Home → click the **Dirty demo** sample
-2. Restoration preview appears instantly — *"CPU only, 184 ms"*
+2. Restoration preview appears instantly - *"CPU only, 184 ms"*
 3. Click **Read with AI** → point at the progress bar:
    *"that is a real measurement, not an animation"*
 4. Text arrives; open the verification panel; download the `.txt`
@@ -614,6 +614,14 @@ page into a searchable record. That is a useful product, stated honestly."*
 
 **Fallback if the GPU stalls:** `04-progress-reading.png` (a real captured
 in-flight run) and `05-result.png` (a real 54.3 s run).
+
+**Rehearse the cold start.** The first transcription after a server restart
+loads the model onto the GPU and takes **~85 s before any output appears**.
+Presented cold, that reads as a hang. Before you go up, run one throwaway
+transcription so the model is already resident; the demo then starts reading in
+~15 s and the progress bar moves immediately. This was verified end-to-end with
+`python scripts/demo_smoke_test.py`, which exercises this exact path against the
+running server and prints the stages it observed.
 
 ---
 
