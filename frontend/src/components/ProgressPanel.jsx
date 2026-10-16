@@ -3,10 +3,11 @@ import { IconClock, IconTextScan } from "./Icons.jsx";
 /**
  * Live progress for a background transcription run.
  *
- * The backend knows two fixed denominators — a cold model load and a line
- * count — so the bar is determinate once reading starts. Loading and
- * line-finding are unpredictable in duration, so those stages sweep instead of
- * claiming a percentage they cannot know.
+ * Line segmentation is off by default, so a read is one whole-page call: the
+ * backend reports no line count and no per-line text, which leaves no
+ * denominator for a real bar. The bar therefore sweeps for every stage rather
+ * than claiming a percentage it cannot know. The line-count facts below are
+ * kept for the SEGMENT_LINES=1 configuration, where they are real.
  */
 const INDETERMINATE = new Set(["queued", "loading_model", "model_ready",
                                "segmenting"]);
@@ -94,8 +95,9 @@ export default function ProgressPanel({ progress }) {
 
       <p className="prog-note">
         <IconClock style={{ width: 12, height: 12, flex: "0 0 auto" }} />
-        The GPU reads one line at a time; keep this tab open and the text
-        appears line by line above.
+        The GPU reads the whole page in one pass, not line by line — roughly
+        15-60 s once the model is loaded. Keep this tab open; the text appears
+        when the read finishes.
       </p>
     </div>
   );

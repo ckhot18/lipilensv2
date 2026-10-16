@@ -33,7 +33,10 @@ MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 INFERENCE_MODE = os.getenv("INFERENCE_MODE", "local")  # "local" | "colab"
 BASE_MODEL_NAME = os.getenv("BASE_MODEL_NAME", "Qwen/Qwen2.5-VL-3B-Instruct")
 LORA_ADAPTER_NAME = os.getenv("LORA_ADAPTER_NAME", "lgtk/qwen25vl-3b-modi-synth-lora")
-COLAB_ENDPOINT_URL = os.getenv("COLAB_ENDPOINT_URL", "")
+# `.env` values are routinely written as `KEY= value`, and a trailing slash on
+# a tunnel URL produces `//health` downstream. Both would look like an
+# unreachable endpoint rather than a typo, so normalise once here.
+COLAB_ENDPOINT_URL = os.getenv("COLAB_ENDPOINT_URL", "").strip().rstrip("/")
 
 # Transcribe one text line at a time instead of a whole page. Costs no GPU
 # (segmentation is OpenCV) and multiplies visual tokens per character.

@@ -71,6 +71,23 @@ export default function Transcribe({
   const pollRef = useRef(null);
   const stopPollingRef = useRef(null);
 
+  // Local object URL for the picked scan, so the comparison has a left half
+  // the instant a file exists rather than after the preview round-trip.
+  // Created in the handler that accepts the file and revoked when it is
+  // replaced or the view is reset, so repeated drops cannot leak.
+  const localUrlRef = useRef(null);
+  const [localScanUrl, setLocalScanUrl] = useState(null);
+
+  const adoptScan = useCallback((next) => {
+    if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
+    localUrlRef.current = next ? URL.createObjectURL(next) : null;
+    setLocalScanUrl(localUrlRef.current);
+  }, []);
+
+  const releaseScan = useCallback(() => adoptScan(null), [adoptScan]);
+
+  useEffect(() => releaseScan, [releaseScan]);
+
   useEffect(() => () => clearTimeout(settleTimer.current), []);
 
   /** Stop watching a run; safe to call when nothing is being watched. */
@@ -122,6 +139,7 @@ export default function Transcribe({
     setBusy(false);
     setDropKey((n) => n + 1);
     setFile(null);
+    releaseScan();
     setPreview(null);
     setPreviewing(false);
     setPreviewMs(null);
@@ -136,7 +154,7 @@ export default function Transcribe({
     setTitle("");
     setIdentifier("");
     setProgress(null);
-  }, []);
+  }, [releaseScan]);
 
   const beginRun = useCallback(() => {
     // Deliberately does NOT touch `busy`/`busyRef`: `read` owns both, so the
@@ -288,9 +306,13 @@ export default function Transcribe({
   useEffect(() => {
     if (!autoFile) return;
     onAutoFileConsumed();
+    // `file` is already set by the useState initialiser above: App remounts this
+    // component (key={runToken}) for every file handed over from Home. This
+    // effect only has to build the local preview URL.
+    adoptScan(autoFile);
     const kick = setTimeout(() => runPreview(autoFile, initialPipeline.current), 0);
     return () => clearTimeout(kick);
-  }, [autoFile, runPreview, onAutoFileConsumed]);
+  }, [autoFile, adoptScan, runPreview, onAutoFileConsumed]);
 
   function chooseFile(next) {
     if (!next) {
@@ -299,6 +321,7 @@ export default function Transcribe({
     }
     reset();
     setDropKey((n) => n + 1);
+    adoptScan(next);
     setFile(next);
     setPreviewing(true);
     runPreview(next, configName);
@@ -342,8 +365,17 @@ export default function Transcribe({
   const tr = result?.transcription;
   const isVerified = verified || Boolean(tr?.verified_transcription);
   const archived = Boolean(result);
-  const originalUrl = archived ? imgUrl(result.original_image_url) : preview?.original;
-  const restoredUrl = archived ? imgUrl(result.restored_image_url) : preview?.restored;
+  // Before the preview round-trip returns there is no server-rendered original
+  // yet, and gating the compare view on it swapped the whole panel for the
+  // Dropzone on every drop — the scan vanished for a beat and the "click to
+  // replace" affordance with it. Fall back to the file the user just picked so
+  // the left half of the comparison is live the instant a scan exists.
+  const originalUrl = archived
+    ? imgUrl(result.original_image_url)
+    : preview?.original || localScanUrl;
+  const restoredUrl = archived
+    ? imgUrl(result.restored_image_url)
+    : preview?.restored || null;
   // Lines read so far. The archive does not store the count, so while a run is
   // live this comes from the job and it disappears on reload — better than a
   // permanent dash, and honest about where it came from.
@@ -381,6 +413,7 @@ export default function Transcribe({
         <div>
           {originalUrl ? (
             <CompareSlider
+              key={dropKey}
               original={originalUrl}
               restored={restoredUrl}
               rightLabel={archived ? configName : `${configName} preview`}
@@ -439,9 +472,10 @@ export default function Transcribe({
               )}
             </div>
             <p className="xs muted" style={{ margin: 0 }}>
-              Restoration above needs no GPU. Only this button waits on the model —
-              about 95 s to load it once, then ~25 s per text line. Progress
-              and the text appear here as each line is read.
+              Restoration above needs no GPU. Only this button waits on the
+              model — a one-time load, then roughly 15-60 s for a whole page.
+              The stage and elapsed time update here; the text appears when the
+              read finishes.
             </p>
           </form>
         </div>

@@ -48,9 +48,10 @@ export default function Home({ onStart }) {
             searchable text.
           </h2>
           <p className="lede">
-            Upload a handwritten or historical document. LipiLens cleans the image,
-            recognizes the script, digitizes the text, and translates it into a
-            readable language.
+            Upload a handwritten or historical document. LipiLens recognizes
+            Modi script and transliterates it into Devanagari — the script
+            Marathi is written in today — so you can read and search it. A
+            human reviewer then verifies every draft.
           </p>
         </div>
 

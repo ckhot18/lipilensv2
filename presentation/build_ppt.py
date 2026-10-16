@@ -4,8 +4,8 @@
 Usage:  python presentation/build_ppt.py
 Output: presentation/lipilens_presentation.pptx
 
-All numbers are the project's real measured results. Author placeholders
-marked TBD — replace before presenting.
+All numbers are the project's real measured results. Team names live in the
+AUTHORS list below — edit there, not in the slide body.
 """
 
 from pathlib import Path
@@ -17,6 +17,14 @@ from pptx.util import Emu, Inches, Pt
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "presentation" / "lipilens_presentation.pptx"
+
+AUTHORS = [
+    "Chirayu Khot",
+    "Tanmay Mangale",
+    "Yash Chougale",
+    "Karan Kavthankar",
+]
+INSTITUTION = "Kolhapur Institute of Technology, Kolhapur"
 
 CREAM = RGBColor(0xF6, 0xF1, 0xE7)
 INK = RGBColor(0x2B, 0x26, 0x20)
@@ -94,8 +102,7 @@ def title_bar(slide, kicker, title):
 
 def footer(slide, n):
     text(slide, Inches(0.7), Inches(6.9), Inches(6), Inches(0.4),
-         "LipiLens · Kolhapur Institute of Technology, Kolhapur",
-         size=12, color=MUTED)
+         f"LipiLens · {INSTITUTION}", size=12, color=MUTED)
     text(slide, Inches(11.6), Inches(6.9), Inches(1), Inches(0.4), str(n),
          size=12, color=MUTED, align=PP_ALIGN.RIGHT)
 
@@ -112,11 +119,10 @@ text(s, Inches(1), Inches(3.5), Inches(11.3), Inches(0.9),
      "AI-assisted transcription of historical Modi manuscripts — with a "
      "measured answer to whether image restoration actually helps.",
      size=20, align=PP_ALIGN.CENTER)
-text(s, Inches(1), Inches(5.0), Inches(11.3), Inches(0.5), "Chirayu Khot",
-     size=22, bold=True, align=PP_ALIGN.CENTER)
+text(s, Inches(1), Inches(4.9), Inches(11.3), Inches(0.5),
+     " · ".join(AUTHORS), size=21, bold=True, align=PP_ALIGN.CENTER)
 text(s, Inches(1), Inches(5.5), Inches(11.3), Inches(0.5),
-     "Kolhapur Institute of Technology, Kolhapur  ·  (+ 3 co-authors & "
-     "faculty mentor — TBD)", size=15, color=MUTED, align=PP_ALIGN.CENTER)
+     INSTITUTION, size=15, color=MUTED, align=PP_ALIGN.CENTER)
 
 # ---- 2. Problem -----------------------------------------------------------
 s = prs.slides.add_slide(BLANK)

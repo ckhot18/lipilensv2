@@ -139,10 +139,13 @@ export default function Library({ initialQuery = "" }) {
               value={tr?.ai_transcription}
               badge={<span className="badge accent" style={{ marginLeft: 8 }}>AI draft</span>}
             />
+            {/* No `latin`: the verified text is Devanagari, exactly like the
+                draft above and the editing textarea below it. Forcing the sans
+                stack here rendered the two views of the same string in
+                different faces. */}
             <TextPanel
               title="Verified Transcription"
               value={editing ? undefined : tr?.verified_transcription}
-              latin
             >
               {editing ? (
                 <>
