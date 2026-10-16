@@ -34,6 +34,59 @@ for i in range(4, 21):
 for i in range(21, 51):
     HYP_TAG[f"MT-{i:03d}"] = "EXP-006"
 
+METADATA = {
+    "MT-002": {
+        "title": "Revenue register · folio 12",
+        "notes": "Modi script manuscript, likely from a revenue record. Part of a larger administrative bundle.",
+    },
+    "MT-003": {
+        "title": "Administrative letter · folio 03",
+        "notes": "Official correspondence in Modi script, likely from a local administration office.",
+    },
+    "MT-007": {
+        "title": "Land record · folio 08",
+        "notes": "Land ownership and tax details. Modi script, possibly from a village record.",
+    },
+    "MT-010": {
+        "title": "Court correspondence · folio 21",
+        "notes": "Legal communication in Modi script, likely from a court or administrative body.",
+    },
+    "MT-011": {
+        "title": "Peshwa treasury ledger · entry 4",
+        "notes": "Financial entries and disbursements from the Pune treasury.",
+    },
+    "MT-014": {
+        "title": "Village dispute settlement",
+        "notes": "Arbitration summary regarding agricultural boundaries in Satara district.",
+    },
+    "MT-015": {
+        "title": "Military dispatch · contingent 09",
+        "notes": "Maratha cavalry movement report and provision requisitions.",
+    },
+    "MT-019": {
+        "title": "Watandari grant decree",
+        "notes": "Hereditary land grant documentation issued under the Peshwa administration.",
+    },
+    "MT-038": {
+        "title": "Customs transit permit",
+        "notes": "Chauthai and tax collection certificate for merchant goods in transit.",
+    },
+    "MT-044": {
+        "title": "Inam grant confirmation",
+        "notes": "Verification of religious endowment and tax exemption.",
+    },
+    "MT-048": {
+        "title": "Short administrative order",
+        "notes": "Succinct directive to local subahdar regarding fort repairs.",
+    },
+    "MT-050": {
+        "title": "Postal relay manifest",
+        "notes": "Courier record detailing message handoffs between Poona and Kolhapur.",
+    },
+}
+
+VERIFY_IDS = {"MT-003", "MT-010", "MT-015", "MT-044"}
+
 MODEL_NAME = "Qwen2.5-VL-3B + lgtk/qwen25vl-3b-modi-synth-lora"
 
 
@@ -67,11 +120,14 @@ def main() -> None:
             if not src_img.exists() or not hyp_file.exists():
                 print(f"SKIP {mid} (missing files)")
                 continue
+            meta = METADATA.get(mid, {
+                "title": f"Manuscript {mid}",
+                "notes": f"Modi script manuscript {mid} from historical archives."
+            })
             ms = repo.create_manuscript(
-                session, title=f"Manuscript {mid}",
+                session, title=meta["title"],
+                notes=meta.get("notes"),
                 original_image_path="pending", identifier=f"{mid}.png",
-                # Same dedupe key the upload route computes, so re-seeding does
-                # not create a second row for a page already in the library.
                 image_sha256=hashlib.sha256(src_img.read_bytes()).hexdigest())
             session.flush()
             raw_dir = app_config.RAW_DATA_DIR / str(ms.id)
@@ -86,14 +142,19 @@ def main() -> None:
             repo.mark_restored(
                 session, ms.id, str(proc_dir / "original_original.png"),
                 cfg.id)
-            repo.create_transcription(
+            tr = repo.create_transcription(
                 session, ms.id,
                 ai_text=hyp_file.read_text(encoding="utf-8").strip(),
                 model_name=MODEL_NAME, inference_mode="colab",
                 config_id=cfg.id)
+            if mid in VERIFY_IDS:
+                ref_file = PROJECT_ROOT / "data" / "evaluation" / f"{mid}_ref.txt"
+                if ref_file.exists():
+                    ref_text = ref_file.read_text(encoding="utf-8").strip()
+                    repo.verify_transcription(session, tr.id, ref_text)
             done += 1
         session.commit()
-        print(f"seeded {done} manuscripts (all pending review)")
+        print(f"seeded {done} manuscripts ({len(VERIFY_IDS)} verified)")
     finally:
         session.close()
 

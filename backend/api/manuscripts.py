@@ -271,12 +271,16 @@ def list_manuscripts(search: str | None = None,
             else repo.list_manuscripts(session))
     if verified is True:
         rows = [r for r in rows if r.status == "verified"]
+    elif verified is False:
+        rows = [r for r in rows if r.status != "verified"]
     rows = rows[offset:offset + limit]
     return [ManuscriptSummary(id=r.id, title=r.title,
                               identifier=r.identifier, status=r.status,
                               verified=(r.status == "verified"),
                               thumbnail_url=_image_url(
-                                  r.original_image_path)) for r in rows]
+                                  r.original_image_path),
+                              notes=r.notes,
+                              created_at=r.created_at) for r in rows]
 
 
 @router.get("/{manuscript_id}", response_model=ManuscriptDetail)

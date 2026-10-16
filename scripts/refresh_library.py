@@ -6,6 +6,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import shutil
 import sys
 from pathlib import Path
@@ -100,7 +101,8 @@ def seed_manuscripts(session, dry_run: bool) -> list[tuple[int, str]]:
 
         ms = repo.create_manuscript(
             session, title=f"Manuscript {mid}",
-            original_image_path="pending", identifier=f"{mid}.png")
+            original_image_path="pending", identifier=f"{mid}.png",
+            image_sha256=hashlib.sha256(src_img.read_bytes()).hexdigest())
         session.flush()
 
         raw_dir = app_config.RAW_DATA_DIR / str(ms.id)

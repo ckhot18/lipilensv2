@@ -1,14 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CompareSlider from "../components/CompareSlider.jsx";
 import Dropzone from "../components/Dropzone.jsx";
 import PipelineSelect from "../components/PipelineSelect.jsx";
 import ProgressPanel from "../components/ProgressPanel.jsx";
-import StatCards from "../components/StatCards.jsx";
 import TextPanel from "../components/TextPanel.jsx";
 import {
+  IconArchive,
   IconArrowRight,
+  IconCheck,
+  IconCompare,
   IconDownload,
-  IconShieldCheck,
+  IconInfo,
+  IconLock,
+  IconSave,
+  IconWand,
+  IconZoom,
 } from "../components/Icons.jsx";
 import {
   getManuscript,
@@ -24,6 +30,14 @@ const PROCESSING_FLOOR_MS = 1600;
 
 /** How often to ask the backend how far the read has got. */
 const POLL_MS = 1000;
+
+/** The three pipelines the reference design exposes as radio cards; the full
+ * set stays reachable through the select underneath. */
+const QUICK_CONFIGS = [
+  { name: "original", label: "Original", note: "recommended" },
+  { name: "enhanced", label: "Enhanced" },
+  { name: "deskewed", label: "Deskew" },
+];
 
 export default function Transcribe({
   autoFile,
@@ -51,6 +65,8 @@ export default function Transcribe({
   const [readMs, setReadMs] = useState(null);
   const [settled, setSettled] = useState(true);
   const [progress, setProgress] = useState(null);
+  const [zoomActual, setZoomActual] = useState(false);
+  const [compareOn, setCompareOn] = useState(true);
 
   const reading = phase === "reading";
 
@@ -154,6 +170,8 @@ export default function Transcribe({
     setTitle("");
     setIdentifier("");
     setProgress(null);
+    setZoomActual(false);
+    setCompareOn(true);
   }, [releaseScan]);
 
   const beginRun = useCallback(() => {
@@ -352,6 +370,12 @@ export default function Transcribe({
     }
   }
 
+  function onArchive() {
+    // The record lives in the library from the moment of upload; archiving
+    // with verified text simply hands the user to that record's home.
+    if (onOpenLibrary) onOpenLibrary();
+  }
+
   function onDownload() {
     const blob = new Blob([draft], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -376,67 +400,174 @@ export default function Transcribe({
   const restoredUrl = archived
     ? imgUrl(result.restored_image_url)
     : preview?.restored || null;
-  // Lines read so far. The archive does not store the count, so while a run is
-  // live this comes from the job and it disappears on reload — better than a
-  // permanent dash, and honest about where it came from.
-  const linesRead = progress?.lines_total || tr?.line_count || null;
   const streaming = reading ? progress?.partial_text || "" : "";
+  const draftText = tr?.ai_transcription || "";
+  const words = useMemo(() => draft.trim().split(/\s+/).filter(Boolean).length, [draft]);
+  const chars = draft.length;
+  const restoreMsFmt =
+    previewMs == null ? null : previewMs < 1000 ? `${Math.round(previewMs)} ms` : `${(previewMs / 1000).toFixed(1)} s`;
+
+  // Stepper: 1 image present, 2 draft exists, 3 human verified, 4 archived.
+  const steps = [
+    { n: 1, label: "Image", state: originalUrl ? "done" : "active" },
+    {
+      n: 2,
+      label: "AI draft",
+      state: reading ? "active" : tr ? "done" : "pending",
+    },
+    {
+      n: 3,
+      label: "Human verification",
+      state: isVerified ? "done" : tr ? "active" : "pending",
+    },
+    {
+      n: 4,
+      label: "Archive",
+      state: isVerified && archived ? "done" : isVerified ? "active" : "pending",
+    },
+  ];
 
   return (
     <>
-      <div className="analysis-head">
-        <div>
-          <h1 className="h1">Document Analysis</h1>
-          <p className="lede" style={{ marginTop: 6 }}>
-            {archived
-              ? "Your scan is archived and restored. Transcription runs on the GPU."
-              : "Restoration is instant and CPU-only. Switch pipelines and watch the scan change."}
-          </p>
-        </div>
-        {archived && onOpenLibrary && (
-          <button type="button" className="btn ghost sm" onClick={onOpenLibrary}>
-            Open in Library
-          </button>
-        )}
-      </div>
+      <header className="page-head">
+        <p className="page-kicker">AI-assisted transcription</p>
+        <h1 className="page-title">Transcribe a manuscript</h1>
+        <p className="page-substeps">
+          <span>Upload</span>
+          <i aria-hidden="true" />
+          <span>preview</span>
+          <i aria-hidden="true" />
+          <span>review</span>
+          <i aria-hidden="true" />
+          <span>archive</span>
+        </p>
+      </header>
 
-      <StatCards
-        pipeline={archived || preview ? configName : null}
-        model={tr?.model_name}
-        mode={tr?.inference_mode}
-        lines={linesRead}
-        restoreMs={previewMs}
-        readMs={readMs}
-      />
+      <div className="transcribe-grid">
+        {/* ---- left: image + restoration ---- */}
+        <section className="card panel">
+          <div className="panel-image-head">
+            <h2 className="panel-title">Manuscript image</h2>
+            <div className="viewer-tools">
+              <button
+                type="button"
+                className={zoomActual ? "vtool on" : "vtool"}
+                onClick={() => setZoomActual((v) => !v)}
+                disabled={!originalUrl}
+                aria-pressed={zoomActual}
+                title={zoomActual ? "Show fitted width" : "Show actual pixels"}
+              >
+                <IconZoom style={{ width: 13, height: 13 }} />
+                {zoomActual ? "100%" : "Fit"}
+              </button>
+              <button
+                type="button"
+                className={compareOn ? "vtool on" : "vtool"}
+                onClick={() => setCompareOn((v) => !v)}
+                disabled={!originalUrl || !restoredUrl}
+                aria-pressed={compareOn}
+                title="Compare original with restored"
+              >
+                <IconCompare style={{ width: 13, height: 13 }} />
+                Compare
+              </button>
+            </div>
+          </div>
 
-      <div className="analysis">
-        <div>
-          {originalUrl ? (
-            <CompareSlider
-              key={dropKey}
-              original={originalUrl}
-              restored={restoredUrl}
-              rightLabel={archived ? configName : `${configName} preview`}
-              processing={previewing || (!settled && archived)}
-            />
-          ) : (
-            <Dropzone key={dropKey} initialFile={file} onFile={chooseFile} />
-          )}
+          <div className={zoomActual && !compareOn ? "viewer actual" : "viewer"}>
+            {originalUrl ? (
+              compareOn && restoredUrl ? (
+                <CompareSlider
+                  key={`${dropKey}-${configName}`}
+                  original={originalUrl}
+                  restored={restoredUrl}
+                  leftLabel="Original"
+                  rightLabel={archived ? configName : "Restored"}
+                  processing={previewing || (!settled && archived)}
+                />
+              ) : (
+                <figure className="viewer-single">
+                  <img
+                    src={originalUrl}
+                    alt="Original manuscript"
+                    className="cmp-img"
+                  />
+                  <figcaption className="tag left">
+                    Original
+                    {previewing && <span className="spinner" style={{ marginLeft: 6 }} />}
+                  </figcaption>
+                </figure>
+              )
+            ) : (
+              <Dropzone key={dropKey} initialFile={file} onFile={chooseFile} />
+            )}
+          </div>
 
-          <form
-            className="form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              beginRun();
-              read(file, configName);
-            }}
-          >
-            <PipelineSelect
-              value={configName}
-              onChange={onPipelineChange}
-              disabled={busy}
-            />
-            <div className="grid2-fields">
+          <div className="preproc">
+            <div className="preproc-head">
+              <h3>Preprocessing / Restoration</h3>
+              <span className="preproc-info" title="Changes can affect recognition — the original is always preserved">
+                <IconInfo style={{ width: 14, height: 14 }} />
+              </span>
+            </div>
+
+            <div className="preproc-cards" role="radiogroup" aria-label="Restoration pipeline">
+              {QUICK_CONFIGS.map((cfg) => {
+                const active = configName === cfg.name;
+                const thumb =
+                  active && compareOn && restoredUrl ? restoredUrl : originalUrl;
+                return (
+                  <label key={cfg.name} className={active ? "tp-card active" : "tp-card"}>
+                    <span className="tp-thumb">
+                      {thumb && <img src={thumb} alt="" loading="lazy" />}
+                    </span>
+                    <span className="tp-radio" aria-hidden="true" />
+                    <span className="tp-label">
+                      <b>{cfg.label}</b>
+                      {cfg.note && <small>{`(${cfg.note})`}</small>}
+                    </span>
+                    <input
+                      type="radio"
+                      name="pipeline"
+                      value={cfg.name}
+                      checked={active}
+                      disabled={busy || !file}
+                      onChange={() => onPipelineChange(cfg.name)}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+
+            <p className="preproc-note">
+              Restoration is optional — changes can affect recognition.
+              {restoreMsFmt && !previewing ? ` (${restoreMsFmt})` : ""}
+            </p>
+
+            <div className="preproc-actions">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => file && runPreview(file, configName)}
+                disabled={!file || previewing || busy}
+              >
+                {previewing ? (
+                  <>
+                    <span className="spinner" style={{ marginRight: 6 }} />
+                    Restoring…
+                  </>
+                ) : (
+                  "Preview image"
+                )}
+              </button>
+              <PipelineSelect
+                value={configName}
+                onChange={onPipelineChange}
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid2-fields ms-fields">
               <label className="field">
                 Title (optional)
                 <input
@@ -454,63 +585,184 @@ export default function Transcribe({
                 />
               </label>
             </div>
-            <div className="btnrow">
-              <button type="submit" className="btn" disabled={!file || busy}>
-                {busy
-                  ? "Working…"
-                  : archived
-                    ? "Re-read with AI"
-                    : "Read with AI"}
-                {!busy && (
-                  <IconArrowRight style={{ width: 14, height: 14, marginLeft: 6 }} />
+          </div>
+        </section>
+
+        {/* ---- right: workflow column ---- */}
+        <div className="panel-side">
+          <section className="card stepper" aria-label="Workflow steps">
+            {steps.map((s, i) => (
+              <div className="step-block" key={s.n}>
+                {i > 0 && <span className="step-link" aria-hidden="true" />}
+                <div className={`step-node ${s.state}`}>
+                  <span className="step-node-num">
+                    {s.state === "done" ? (
+                      <IconCheck style={{ width: 12, height: 12 }} />
+                    ) : (
+                      s.n
+                    )}
+                  </span>
+                  <span className="step-node-label">{s.label}</span>
+                </div>
+              </div>
+            ))}
+          </section>
+
+          <section className="card">
+            <div className="read-row">
+              <button
+                type="button"
+                className="btn read-btn"
+                onClick={() => {
+                  beginRun();
+                  read(file, configName);
+                }}
+                disabled={!file || busy}
+              >
+                <IconWand style={{ width: 15, height: 15, marginRight: 7 }} />
+                {busy ? "Working…" : "Read with AI"}
+              </button>
+              <div className="read-note">
+                <p>
+                  The AI output is a draft, not an authoritative transcription.
+                </p>
+                <p>Human verification is required before archiving.</p>
+              </div>
+            </div>
+
+            {reading && progress && <ProgressPanel progress={progress} />}
+            {!reading && progress === null && archived && (
+              <p className="xs faint" style={{ margin: 0 }}>
+                Restoration above needs no GPU. Only this button waits on the
+                model — a one-time load, then roughly 15-60 s for a whole page.
+              </p>
+            )}
+          </section>
+
+          <section className="card draft-card">
+            <div className="textcard-head">
+              <h3 className="textcard-title">AI transcription draft</h3>
+              <span className="badge warn">
+                <IconLock style={{ width: 11, height: 11 }} />
+                Needs human review
+              </span>
+              <span className="readonly-lock">
+                <IconLock style={{ width: 12, height: 12 }} />
+                Read only
+              </span>
+            </div>
+
+            <div className="draftbox">
+              <p className="textcard-body deva">
+                {reading
+                  ? streaming || <span className="skeleton-lines"><span /><span /><span /></span>
+                  : draftText || "—"}
+              </p>
+            </div>
+
+            {tr && (
+              <p className="xs faint" style={{ margin: 0 }}>
+                {tr.model_name}
+                {tr.inference_mode ? ` · ${tr.inference_mode}` : ""}
+                {readMs ? ` · read ${(readMs / 1000).toFixed(1)}s` : ""}
+                {isVerified ? " · kept immutable after verification" : ""}
+              </p>
+            )}
+            {!tr && !reading && (
+              <p className="xs faint" style={{ margin: 0 }}>
+                Upload a manuscript and press “Read with AI” to generate the
+                draft here.
+              </p>
+            )}
+          </section>
+
+          <section className="card verify-card">
+            <div className="textcard-head">
+              <h3 className="textcard-title">
+                Verified transcription
+                <span className="verify-sub">(human-edited)</span>
+              </h3>
+              <span className="verify-counts">
+                Words: <b>{archived ? words : "—"}</b>
+                <span className="count-sep">|</span>
+                Characters: <b>{archived ? chars : "—"}
+                </b>
+              </span>
+            </div>
+
+            <textarea
+              className="textarea"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={6}
+              placeholder={tr ? "" : "Run the AI read first, then correct its draft here."}
+              aria-label="Verified transcription"
+            />
+
+            <p className="verify-note">
+              <IconInfo style={{ width: 13, height: 13, flex: "0 0 auto" }} />
+              Your corrections are saved separately; the AI draft remains
+              unchanged.
+            </p>
+
+            <div className="verify-actions">
+              <button
+                type="button"
+                className={isVerified ? "btn ghost" : "btn"}
+                onClick={onVerify}
+                disabled={!tr || busy}
+                title="Save the corrected text as the verified transcription"
+              >
+                {isVerified ? (
+                  <>
+                    <IconCheck style={{ width: 14, height: 14, marginRight: 6 }} />
+                    Verified
+                  </>
+                ) : (
+                  <>
+                    <IconSave style={{ width: 14, height: 14, marginRight: 6 }} />
+                    Save verified text
+                  </>
                 )}
               </button>
-              {file && (
-                <button type="button" className="btn ghost" onClick={reset} disabled={busy}>
-                  Process another
+              <div className="archive-block">
+                <button
+                  type="button"
+                  className="btn ghost archive-btn"
+                  onClick={onArchive}
+                  disabled={!isVerified || !archived}
+                  title={
+                    isVerified
+                      ? "Open the archived record in your library"
+                      : "Complete human verification to enable archiving"
+                  }
+                >
+                  <IconArchive style={{ width: 14, height: 14, marginRight: 6 }} />
+                  {isVerified ? "Open archived record" : "Archive record"}
                 </button>
-              )}
-            </div>
-            <p className="xs muted" style={{ margin: 0 }}>
-              Restoration above needs no GPU. Only this button waits on the
-              model — a one-time load, then roughly 15-60 s for a whole page.
-              The stage and elapsed time update here; the text appears when the
-              read finishes.
-            </p>
-          </form>
-        </div>
-
-        <div className="analysis-side">
-          <section className="card">
-            <div className="textcard-head">
-              <h3>Digitized Text</h3>
-              {reading ? (
-                <span className="badge accent">Reading…</span>
-              ) : isVerified ? (
-                <span className="badge ok" style={{ marginLeft: 8 }}>
-                  <IconShieldCheck style={{ width: 11, height: 11 }} />
-                  Verified
-                </span>
-              ) : tr ? (
-                <span className="badge warn" style={{ marginLeft: 8 }}>
-                  AI draft
-                </span>
-              ) : null}
+                <p className="xs muted" style={{ margin: "6px 0 0", textAlign: "right" }}>
+                  {isVerified
+                    ? "The verified text is stored with the record."
+                    : "Complete human verification to enable archiving."}
+                </p>
+              </div>
             </div>
 
-            {reading && <ProgressPanel progress={progress} />}
-
-            <p className="textcard-body">
-              {reading
-                ? streaming || "—"
-                : tr?.ai_transcription || "—"}
-            </p>
-
-            {reading && !streaming && (
-              <div className="skeleton-lines" style={{ marginTop: 12 }}>
-                <span />
-                <span />
-                <span />
+            {tr && (
+              <div className="btnrow" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="toolbtn"
+                  onClick={onDownload}
+                  aria-label="Download verified text as .txt"
+                >
+                  <IconDownload style={{ width: 13, height: 13 }} />
+                  Download (.txt)
+                </button>
+                <span className="badge accent">
+                  {tr.model_name}
+                  {tr.inference_mode ? ` · ${tr.inference_mode}` : ""}
+                </span>
               </div>
             )}
           </section>
@@ -521,50 +773,18 @@ export default function Transcribe({
         </div>
       </div>
 
-      {tr && (
-        <section className="card" style={{ marginTop: 16 }}>
-          <div className="textcard-head">
-            <h3>Human verification</h3>
-            <button
-              type="button"
-              className="toolbtn"
-              onClick={onDownload}
-              aria-label="Download as text file"
-            >
-              <IconDownload style={{ width: 13, height: 13 }} />
-              Download (.txt)
+      {file && (
+        <div className="btnrow" style={{ marginTop: 14 }}>
+          <button type="button" className="btn ghost sm" onClick={reset} disabled={busy}>
+            Process another
+          </button>
+          {archived && onOpenLibrary && (
+            <button type="button" className="btn ghost sm" onClick={onOpenLibrary}>
+              Open in Library
+              <IconArrowRight style={{ width: 13, height: 13, marginLeft: 6 }} />
             </button>
-          </div>
-
-          <p className="xs muted" style={{ margin: "0 0 8px" }}>
-            Edit below and verify. The AI draft above is never altered.
-          </p>
-
-          <textarea
-            className="textarea"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={6}
-            aria-label="Verified transcription"
-            disabled={isVerified}
-          />
-
-          <div className="btnrow" style={{ marginTop: 12 }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={onVerify}
-              disabled={busy || isVerified}
-            >
-              <IconShieldCheck style={{ width: 14, height: 14, marginRight: 6 }} />
-              {isVerified ? "Verified" : "Mark as Verified"}
-            </button>
-            <span className="badge accent">
-              {tr.model_name}
-              {tr.inference_mode ? ` · ${tr.inference_mode}` : ""}
-            </span>
-          </div>
-        </section>
+          )}
+        </div>
       )}
 
       {phase === "cleaning" && (

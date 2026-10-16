@@ -12,6 +12,8 @@ class ManuscriptSummary(BaseModel):
     status: str
     verified: bool = False
     thumbnail_url: str | None = None
+    notes: str | None = None
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
